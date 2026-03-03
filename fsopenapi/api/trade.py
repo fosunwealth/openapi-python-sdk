@@ -55,7 +55,7 @@ class TradeAPI:
             payload["tailPct"] = str(tail_pct)
         if spread is not None:
             payload["spread"] = str(spread)
-        return self.client.post("/trade/OrderCreate", data=payload)
+        return self.client.post("/api/v1/trade/OrderCreate", data=payload)
 
     def cancel_order(self, order_id, sub_account_id=None, client_id=None):
         """撤单"""
@@ -64,7 +64,7 @@ class TradeAPI:
             payload["subAccountId"] = str(sub_account_id)
         if client_id is not None:
             payload["clientId"] = int(client_id)
-        return self.client.post("/trade/OrderCancel", data=payload)
+        return self.client.post("/api/v1/trade/OrderCancel", data=payload)
 
     def list_orders(
         self,
@@ -116,7 +116,7 @@ class TradeAPI:
             payload["market"] = [str(x) for x in _m]
         if client_id is not None:
             payload["clientId"] = int(client_id)
-        return self.client.post("/trade/OrderList", data=payload)
+        return self.client.post("/api/v1/trade/OrderList", data=payload)
 
     def get_cash_flows(self, sub_account_id, trade_date_from=None, trade_date_to=None, flow_type=None, business_type=None, date=None):
         """查询资金流水"""
@@ -132,7 +132,7 @@ class TradeAPI:
             payload["businessType"] = [int(x) for x in _bt]
         if date is not None:
             payload["date"] = date
-        return self.client.post("/trade/CashFlows", data=payload)
+        return self.client.post("/api/v1/trade/CashFlows", data=payload)
 
     def get_bid_ask_info(
         self,
@@ -162,4 +162,4 @@ class TradeAPI:
             payload["trigPrice"] = str(trig_price)
         if client_id is not None:
             payload["clientId"] = int(client_id)
-        return self.client.post("/trade/BidAskInfo", data=payload)
+        return self.client.post("/api/v1/trade/BidAskInfo", data=payload)

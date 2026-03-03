@@ -21,7 +21,7 @@ class SessionAPI:
     
     def delete_session(self) -> Dict[str, Any]:
         """删除当前会话"""
-        result = self.client.post("/auth/SessionDelete", data={})
+        result = self.client.post("/api/v1/auth/SessionDelete", data={})
         self.client.auth_manager.session_id = None
         self.client.auth_manager.signing_key = None
         self.client.auth_manager.encryption_key = None

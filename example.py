@@ -10,7 +10,7 @@ import os
 # ============================================================
 # 配置：替换为实际的网关地址和 API Key
 # ============================================================
-BASE_URL = "https://openapi-sit.fosunxcz.com/api/v1"
+BASE_URL = "https://openapi-sit.fosunxcz.com"
 API_KEY = "ak_xxxx="
 SUB_ACCOUNT_ID = "xxxx"
 
@@ -161,8 +161,8 @@ if __name__ == "__main__":
         demo_session()
         demo_account()
         demo_portfolio()
-        demo_trade()
         demo_market()
+        demo_trade()
     except AuthenticationError as e:
         print(f"鉴权失败: {e.code} - {e.message}")
     except PermissionError as e:
