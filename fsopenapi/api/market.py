@@ -1,6 +1,6 @@
 # 行情 API
 
-_MARKET_BASE = "/market"
+_MARKET_BASE = "/api/v1/market"
 
 class MarketAPI:
     def __init__(self, client):
