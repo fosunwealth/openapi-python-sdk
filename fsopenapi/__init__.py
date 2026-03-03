@@ -10,9 +10,9 @@ from .exceptions import APIError, AuthenticationError, PermissionError, CacheErr
 
 class SDKClient(OpenAPIClient):
     def __init__(self, base_url, api_key):
-        missing = [k for k in ("FSOPENAPI_CLIENT_PUBLIC_KEY", "FSOPENAPI_CLIENT_PRIVATE_KEY") if not os.environ.get(k)]
+        missing = [k for k in ("FSOPENAPI_SERVER_PUBLIC_KEY", "FSOPENAPI_CLIENT_PRIVATE_KEY") if not os.environ.get(k)]
         if missing:
-            raise ValueError(f"缺少必要的环境变量: {', '.join(missing)}。请在启动前设置 FSOPENAPI_CLIENT_PUBLIC_KEY 和 FSOPENAPI_CLIENT_PRIVATE_KEY")
+            raise ValueError(f"缺少必要的环境变量: {', '.join(missing)}。请在启动前设置 FSOPENAPI_SERVER_PUBLIC_KEY 和 FSOPENAPI_CLIENT_PRIVATE_KEY")
         super().__init__(base_url, api_key)
         self.session = SessionAPI(self)
         self.trade = TradeAPI(self)
