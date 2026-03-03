@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# 安装产物
+*.egg-info/
+dist/
+build/
+
+# 本地会话缓存（含私钥，禁止提交）
+session.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
