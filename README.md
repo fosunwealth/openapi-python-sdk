@@ -33,8 +33,8 @@ cryptography>=41.0.0
 例如（Linux/macOS bash）：
 
 ```bash
-export FSOPENAPI_CLIENT_PUBLIC_KEY="$(cat ./public.pem)"
-export FSOPENAPI_CLIENT_PRIVATE_KEY="$(cat ./private.pem)"
+export FSOPENAPI_SERVER_PUBLIC_KEY="$(cat ./server_public.pem)"
+export FSOPENAPI_CLIENT_PRIVATE_KEY="$(cat ./client_private.pem)"
 ```
 
 如果密钥未通过环境变量正确提供，SDK 初始化会抛出错误并提示密钥缺失。
@@ -205,7 +205,7 @@ except APIError as e:
 
 ## 注意事项
 
-1. **base_url**：填写网关完整 base_url（如 `https://host/api/v1`），不要以 `/` 结尾。
+1. **base_url**：填写网关完整 base_url（如 `https://host`），不要以 `/` 结尾。
 2. **API Key**：由开放平台下发，请勿泄露。
 3. **会话**：SDK 会自动完成 ECDH 建连与过期前续期，业务侧一般无需手动调用 `session.create_session()`。
 4. **行情接口**：走 `/market/`，仅签名不加密；交易/账户等接口请求体与响应支持 AES-GCM 加解密。
