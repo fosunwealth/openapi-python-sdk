@@ -27,7 +27,7 @@ cryptography>=41.0.0
 **注意**：SDK 通过环境变量获取密钥内容。如果未检测到密钥，将直接抛出异常并停止运行。  
 请在启动前配置以下环境变量（例如在 `.env` 文件或操作系统环境中设置）：
 
-- `FSOPENAPI_CLIENT_PUBLIC_KEY`:  设置为您的公钥内容（PEM 格式，单行/多行均可）  
+- `FSOPENAPI_SERVER_PUBLIC_KEY`:  设置为您的公钥内容（PEM 格式，单行/多行均可）  
 - `FSOPENAPI_CLIENT_PRIVATE_KEY`: 设置为您的私钥内容（PEM 格式，单行/多行均可）  
 
 例如（Linux/macOS bash）：
