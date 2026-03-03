@@ -73,7 +73,7 @@ class SessionManager:
         """执行 ECDH 握手创建会话"""
         self.private_key, client_pub_key = CryptoManager.generate_ecdh_key_pair()
         
-        url = f"{self.base_url}/auth/SessionCreate"
+        url = f"{self.base_url}/api/v1/auth/SessionCreate"
         
         # 严格匹配后端 mapping.SessionCreateRequest 的 JSON 标签
         payload = {

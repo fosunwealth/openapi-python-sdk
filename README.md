@@ -46,7 +46,7 @@ export FSOPENAPI_CLIENT_PRIVATE_KEY="$(cat ./private.pem)"
 from fsopenapi import SDKClient
 from fsopenapi import APIError, AuthenticationError
 
-BASE_URL = "https://your-gateway-host/api/v1"  # 网关 base_url，不含末尾 /
+BASE_URL = "https://your-gateway-host"  # 网关 base_url，不含末尾 /
 API_KEY = "your-api-key"
 
 client = SDKClient(BASE_URL, API_KEY)
