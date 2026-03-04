@@ -105,7 +105,7 @@ class CryptoManager:
 
     @staticmethod
     def build_response_aad(session_id: str, timestamp: str, nonce: str) -> str:
-        """构造响应解密使用的 AAD，与网关 BuildResponseAAD 完全一致"""
+        """构造响应解密使用的 AAD"""
         return f"X-session:{session_id}|X-timestamp:{timestamp}|X-nonce:{nonce}"
 
     @staticmethod

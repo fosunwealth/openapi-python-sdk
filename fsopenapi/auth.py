@@ -96,7 +96,7 @@ class SessionManager:
 
         signature = CryptoManager.sign_handshake(self.identity_private_key, client_pub_key, self.client_nonce)
 
-        url = f"{self.base_url}/auth/SessionCreate"
+        url = f"{self.base_url}/api/v1/auth/SessionCreate"
 
         payload = {
             "apiKey": str(self.api_key),
