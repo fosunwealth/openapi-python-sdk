@@ -3,9 +3,10 @@ import uuid
 import base64
 import requests
 import json
+import os
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec
 from .crypto import CryptoManager
+
 
 class SessionManager:
     def __init__(self, base_url, api_key):
@@ -16,6 +17,19 @@ class SessionManager:
         self.encryption_key = None
         self.expires_at = 0
         self.private_key = None
+        self.client_nonce = None
+        self.server_nonce = None
+        self._server_pub_key = None
+
+        client_priv_pem = os.environ.get("FSOPENAPI_CLIENT_PRIVATE_KEY")
+        server_pub_pem = os.environ.get("FSOPENAPI_SERVER_PUBLIC_KEY")
+
+        if not client_priv_pem or not server_pub_pem:
+            self.identity_private_key = None
+            self.identity_public_key = None
+        else:
+            self.identity_private_key = CryptoManager.load_identity_private_key(client_priv_pem)
+            self.identity_public_key = CryptoManager.load_identity_public_key(server_pub_pem)
 
     def set_session(self, session_id, signing_key, encryption_key, expires_at):
         """手动设置会话信息（用于持久化复用）"""
@@ -26,11 +40,8 @@ class SessionManager:
 
     def dump_session(self):
         """
-        将当前会话序列化为可持久化的字典（可存入 JSON 文件）。
-        包含重新派生双密钥所需的全部信息：
-          - sessionId / expiresAt
-          - clientPrivateKey：客户端临时 ECDH 私钥（PEM，PKCS8）
-          - serverPublicKey：握手时服务端返回的临时公钥（Base64）
+        将当前会话序列化为可持久化的字典。
+        包含重新派生双密钥所需的全部信息。
         """
         if not self.session_id or self.private_key is None:
             return None
@@ -44,12 +55,14 @@ class SessionManager:
             "expiresAt": self.expires_at,
             "clientPrivateKey": priv_pem,
             "serverPublicKey": self._server_pub_key,
+            "clientNonce": self.client_nonce,
+            "serverNonce": self.server_nonce,
         }
 
     def restore_session(self, dumped: dict):
         """
-        从 dump_session() 返回的字典中恢复完整会话（包括重新派生双密钥）。
-        如果会话已过期（提前 60 秒），返回 False，调用方应重新握手。
+        从 dump_session() 返回的字典中恢复完整会话。
+        如果会话已过期（提前 60 秒），返回 False。
         """
         expires_at = dumped.get("expiresAt", 0)
         if time.time() >= (expires_at - 60):
@@ -57,32 +70,39 @@ class SessionManager:
 
         priv_pem = dumped.get("clientPrivateKey", "").encode("utf-8")
         server_pub_key = dumped.get("serverPublicKey")
+        client_nonce = dumped.get("clientNonce")
+        server_nonce = dumped.get("serverNonce")
 
         self.private_key = serialization.load_pem_private_key(priv_pem, password=None)
         self.session_id = dumped.get("sessionId")
         self.expires_at = expires_at
         self._server_pub_key = server_pub_key
+        self.client_nonce = client_nonce
+        self.server_nonce = server_nonce
 
-        # 重新派生双密钥，与握手时完全一致
         self.signing_key, self.encryption_key = CryptoManager.compute_shared_secret(
-            self.private_key, server_pub_key
+            self.private_key, server_pub_key, client_nonce, server_nonce
         )
         return True
 
     def create_session(self):
-        """执行 ECDH 握手创建会话"""
+        """执行 ECDH+ECDSA 握手创建会话"""
+        if not self.identity_private_key or not self.identity_public_key:
+            raise ValueError("Missing FSOPENAPI_CLIENT_PRIVATE_KEY or FSOPENAPI_SERVER_PUBLIC_KEY environment variables")
+
         self.private_key, client_pub_key = CryptoManager.generate_ecdh_key_pair()
-        
-        url = f"{self.base_url}/api/v1/auth/SessionCreate"
-        
-        # 严格匹配后端 mapping.SessionCreateRequest 的 JSON 标签
+
+        self.client_nonce = base64.b64encode(os.urandom(32)).decode('utf-8')
+
+        signature = CryptoManager.sign_handshake(self.identity_private_key, client_pub_key, self.client_nonce)
+
+        url = f"{self.base_url}/auth/SessionCreate"
+
         payload = {
             "apiKey": str(self.api_key),
-            "clientPublicKey": str(client_pub_key)
+            "clientTempPublicKey": str(client_pub_key),
         }
-        
-        # 补充网关可能要求的必填 Header
-        # 确保所有 Header 键名和值都是字符串，且符合网关惯例
+
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
@@ -91,71 +111,43 @@ class SessionManager:
             "X-timestamp": str(int(time.time() * 1000)),
             "X-source": "python-sdk",
             "X-product": "sdk",
-            "X-lang": "zh-CN"
+            "X-lang": "zh-CN",
+            "X-Nonce": self.client_nonce,
+            "X-Signature": signature,
         }
-        
-        print(f"\n>>> [Auth Request] POST {url}")
-        print(f"Headers: {json.dumps(headers, indent=2)}")
-        print(f"Body: {json.dumps(payload, indent=2)}")
 
         response = requests.post(url, json=payload, headers=headers, verify=False)
-        
-        print(f"<<< [Auth Response] Status: {response.status_code}")
-        try:
-            print(f"Response Body: {json.dumps(response.json(), indent=2, ensure_ascii=False)}")
-        except:
-            print(f"Response Body: {response.text}")
-
         response.raise_for_status()
-        
+
         data = response.json()
         if data.get("code") != 0:
-            from .exceptions import APIError, AuthenticationError, PermissionError, CacheError
-            
-            error_code = data.get("code")
-            error_message = data.get("message", "")
-            request_id = data.get("requestId")
-            
-            # 根据错误码分类抛出不同的异常
-            # 40001-40009: 鉴权错误
-            if 40001 <= error_code <= 40009:
-                raise AuthenticationError(
-                    code=error_code,
-                    message=error_message,
-                    request_id=request_id
-                )
-            # 40101-40102: 权限错误
-            elif 40101 <= error_code <= 40102:
-                raise PermissionError(
-                    code=error_code,
-                    message=error_message,
-                    request_id=request_id
-                )
-            # 50003: 缓存错误（权限同步失败时可能返回此错误）
-            elif error_code == 50003:
-                raise CacheError(
-                    code=error_code,
-                    message=f"Cache error: {error_message}. This may indicate that permission synchronization failed during session creation.",
-                    request_id=request_id
-                )
-            # 其他错误
-            else:
-                raise APIError(
-                    code=error_code,
-                    message=error_message,
-                    request_id=request_id
-                )
-            
-        session_data = data.get("data", {})
-        self.session_id = session_data.get("sessionId")
-        server_pub_key = session_data.get("serverPublicKey")
-        self.expires_at = session_data.get("expiresAt", 0)
-        self._server_pub_key = server_pub_key  # 保存以支持 dump_session
+            from .exceptions import AuthenticationError
+            raise AuthenticationError(
+                code=data.get("code", -1),
+                message=data.get("message", "Handshake failed"),
+            )
 
-        # 计算并派生双密钥
-        self.signing_key, self.encryption_key = CryptoManager.compute_shared_secret(self.private_key, server_pub_key)
-        
-        # 返回完整的会话信息
+        session_data = data.get("data") or {}
+        self.session_id = session_data.get("sessionId")
+        server_pub_key = session_data.get("serverTempPublicKey")
+        self.expires_at = session_data.get("expiresAt", 0)
+        self._server_pub_key = server_pub_key
+
+        server_signature = response.headers.get("X-Signature")
+        self.server_nonce = response.headers.get("X-Nonce")
+
+        if not server_signature or not self.server_nonce:
+            from .exceptions import AuthenticationError
+            raise AuthenticationError(code=40010, message="Missing server signature or nonce in response headers")
+
+        if not CryptoManager.verify_handshake(self.identity_public_key, server_pub_key, self.server_nonce, server_signature):
+            from .exceptions import AuthenticationError
+            raise AuthenticationError(code=40011, message="Invalid server signature in handshake")
+
+        self.signing_key, self.encryption_key = CryptoManager.compute_shared_secret(
+            self.private_key, server_pub_key, self.client_nonce, self.server_nonce
+        )
+
         return {
             "sessionId": self.session_id,
             "serverPublicKey": server_pub_key,
@@ -165,11 +157,9 @@ class SessionManager:
 
     def get_valid_session(self):
         """获取有效会话，如果过期则重新创建"""
-        # 提前 60 秒续期
         if not self.session_id or time.time() >= (self.expires_at - 60):
             self.create_session()
         return self.session_id, self.signing_key, self.encryption_key
-    
+
     def _get_current_timestamp(self):
-        """获取当前时间戳（用于测试和内部方法）"""
         return time.time()
