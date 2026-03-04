@@ -10,26 +10,18 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 class CryptoManager:
     @staticmethod
-    def _normalize_pem(pem_string):
-        if not pem_string:
-            return pem_string
-        s = pem_string.replace("\\r", "").strip()
-        s = s.replace("\\\\n", "\\n")
-        return s
-
-    @staticmethod
     def load_identity_private_key(pem_string):
-        pem_string = CryptoManager._normalize_pem(pem_string)
+        """从 PEM 字符串加载 ECDSA P-384 长期私钥"""
         return serialization.load_pem_private_key(
-            pem_string.encode("utf-8"),
+            pem_string.encode('utf-8'),
             password=None,
         )
 
     @staticmethod
     def load_identity_public_key(pem_string):
-        pem_string = CryptoManager._normalize_pem(pem_string)
+        """从 PEM 字符串加载 ECDSA P-384 长期公钥"""
         return serialization.load_pem_public_key(
-            pem_string.encode("utf-8")
+            pem_string.encode('utf-8')
         )
 
     @staticmethod

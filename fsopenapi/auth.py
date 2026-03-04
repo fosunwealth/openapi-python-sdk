@@ -119,7 +119,11 @@ class SessionManager:
         response = requests.post(url, json=payload, headers=headers, verify=False)
         response.raise_for_status()
 
-        data = response.json()
+        resp = response.json()
+        if "encrypted" in resp:
+            data = resp.get("content") or {}
+        else:
+            data = resp
         if data.get("code") != 0:
             from .exceptions import AuthenticationError
             raise AuthenticationError(

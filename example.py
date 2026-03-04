@@ -11,8 +11,8 @@ import os
 # 配置：替换为实际的网关地址和 API Key
 # ============================================================
 BASE_URL = "https://openapi-sit.fosunxcz.com"
-API_KEY = "ak_xxxx="
-SUB_ACCOUNT_ID = "xxxx"
+# API_KEY = "ak_zYepZIu9xNmBKbQjd9O7a-fSuPLpTnmb6WQ5cijInf4="
+# SUB_ACCOUNT_ID = "366226737"
 
 client = SDKClient(BASE_URL, API_KEY)
 

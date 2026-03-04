@@ -96,27 +96,30 @@ class OpenAPIClient:
             response.raise_for_status()
             return response.text
 
-        is_encrypted = resp_payload.get("encrypted", False)
-        content_obj = resp_payload.get("content")
-
-        if is_encrypted:
-            iv_b64 = resp_payload.get("iv")
-            tag_b64 = resp_payload.get("tag")
-            aad_str = CryptoManager.build_response_aad(session_id, timestamp, nonce)
-
-            try:
-                decrypted_bytes = CryptoManager.decrypt_body(
-                    encryption_key, iv_b64, content_obj, tag_b64, aad_str.encode('utf-8')
-                )
-            except Exception as e:
-                raise APIError(code=-1, message=f"Response decryption failed: {str(e)}")
-
-            try:
-                data = json.loads(decrypted_bytes)
-            except Exception as e:
-                raise APIError(code=-1, message=f"Failed to parse decrypted JSON: {str(e)}")
+        if "encrypted" not in resp_payload:
+            data = resp_payload
         else:
-            data = content_obj
+            is_encrypted = resp_payload.get("encrypted", False)
+            content_obj = resp_payload.get("content")
+
+            if is_encrypted:
+                iv_b64 = resp_payload.get("iv")
+                tag_b64 = resp_payload.get("tag")
+                aad_str = CryptoManager.build_response_aad(session_id, timestamp, nonce)
+
+                try:
+                    decrypted_bytes = CryptoManager.decrypt_body(
+                        encryption_key, iv_b64, content_obj, tag_b64, aad_str.encode('utf-8')
+                    )
+                except Exception as e:
+                    raise APIError(code=-1, message=f"Response decryption failed: {str(e)}")
+
+                try:
+                    data = json.loads(decrypted_bytes)
+                except Exception as e:
+                    raise APIError(code=-1, message=f"Failed to parse decrypted JSON: {str(e)}")
+            else:
+                data = content_obj
 
         if not isinstance(data, dict):
             return data
