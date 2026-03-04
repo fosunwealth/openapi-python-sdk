@@ -41,7 +41,6 @@ export FSOPENAPI_CLIENT_PRIVATE_KEY="$(cat ./client_private.pem)"
 
 ## 快速开始
 
-
 ```python
 from fsopenapi import SDKClient
 from fsopenapi import APIError, AuthenticationError

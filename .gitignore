@@ -16,6 +16,7 @@ build/
 
 # 本地会话缓存（含私钥，禁止提交）
 session.json
+*.pem
 
 # IDE
 .idea/
