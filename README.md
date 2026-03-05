@@ -11,18 +11,45 @@
 
 ### 从源码安装
 
-如果希望集成到您的业务代码中，也可以将 `openapi-python-sdk` 目录复制到您的业务项目，并在您的业务代码根目录下执行同样的安装命令：
+如果希望集成到您的业务代码中，也可以将 `openapi-python-sdk` 目录复制到您的业务项目，并在您的业务代码目录下执行下面的安装命令：
+
+下面是一个完整的样例目录结构，外层为业务工程目录：
+
+```
+mybusiness/
+├── example.py   # 示例代码（业务侧调用）
+├── openapi-python-sdk/
+│   ├── fsopenapi/             # SDK 主代码包
+│   │   ├── __init__.py
+│   │   ├── client.py
+│   │   ├── ...                # 其他模块
+│   ├── README.md
+│   ├── pyproject.toml
+│   ├── setup.py
+│   └── ...
+└── ...
+```
+
+安装和调用方式举例：
+
+在 `mybusiness` 目录下执行：
 
 ```bash
 pip install -e ./openapi-python-sdk
 ```
 
-将自动安装依赖 `requests`、`cryptography`。若需固定版本，可使用：
+在 `example.py` (可拷贝openapi-python-sdk下example.py)中即可导入并调用 SDK：
 
+```python
+from fsopenapi import SDKClient
+# ...
 ```
-requests>=2.28.0
-cryptography>=41.0.0
+
+```bash
+pip install -e ./openapi-python-sdk
 ```
+
+将自动安装依赖 `requests`、`cryptography`。
 
 **注意**：SDK 通过环境变量获取密钥内容。如果未检测到密钥，将直接抛出异常并停止运行。  
 请在启动前配置以下环境变量（例如在 `.env` 文件或操作系统环境中设置）：
