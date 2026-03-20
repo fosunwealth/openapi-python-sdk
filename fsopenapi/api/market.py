@@ -4,15 +4,13 @@ class MarketAPI:
     def __init__(self, client):
         self.client = client
 
-    def quote(self, codes, delay=None, fields=None):
+    def quote(self, codes, fields=None):
         """批量证券报价
         """
         payload = {"codes": list(codes)}
-        if delay is not None:
-            payload["delay"] = bool(delay)
         if fields is not None:
             payload["fields"] = list(fields)
-        return self.client.post("/api/v1/market/secu/quote", data=payload)
+        return self.client.post("/v1/market/secu/quote", data=payload)
 
     def kline(
         self,
@@ -43,7 +41,7 @@ class MarketAPI:
             payload["suspension"] = suspension
         if time is not None:
             payload["time"] = time
-        return self.client.post("/api/v1/market/kline", data=payload)
+        return self.client.post("/v1/market/kline", data=payload)
 
     def min(self, code, count=5):
         """分时数据
@@ -51,7 +49,7 @@ class MarketAPI:
         params = {"code": code}
         if count is not None:
             params["count"] = count
-        return self.client.get("/api/v1/market/min", params=params)
+        return self.client.get("/v1/market/min", params=params)
 
     def orderbook(self, code, count=5):
         """盘口/买卖档
@@ -59,7 +57,7 @@ class MarketAPI:
         params = {"code": code}
         if count is not None:
             params["count"] = count
-        return self.client.get("/api/v1/market/secu/orderbook", params=params)
+        return self.client.get("/v1/market/secu/orderbook", params=params)
 
     def tick(self, code, count=20, id=-1, ts=None):
         """逐笔成交
@@ -67,12 +65,12 @@ class MarketAPI:
         params = {"code": code, "count": count, "id": id}
         if ts is not None:
             params["ts"] = ts
-        return self.client.get("/api/v1/market/secu/tick", params=params)
+        return self.client.get("/v1/market/secu/tick", params=params)
 
     def broker_list(self, code):
         """买卖盘经纪商队列
         """
         return self.client.get(
-            "/api/v1/market/secu/brokerq",
+            "/v1/market/secu/brokerq",
             params={"code": code},
         )

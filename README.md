@@ -56,26 +56,34 @@ pip install -e ./openapi-python-sdk
 
 - `FSOPENAPI_SERVER_PUBLIC_KEY`:  设置为您的公钥内容（PEM 格式，单行/多行均可）  
 - `FSOPENAPI_CLIENT_PRIVATE_KEY`: 设置为您的私钥内容（PEM 格式，单行/多行均可）  
+- `SDK_TYPE`: 可选；默认走 `/api` 前缀，设置为 `ops` 时走 `/api/ops` 前缀  
 
 例如（Linux/macOS bash）：
 
 ```bash
 export FSOPENAPI_SERVER_PUBLIC_KEY="$(cat ./server_public.pem)"
 export FSOPENAPI_CLIENT_PRIVATE_KEY="$(cat ./client_private.pem)"
+export SDK_TYPE=ops
 ```
 
 如果密钥未通过环境变量正确提供，SDK 初始化会抛出错误并提示密钥缺失。
 
+如果不设置 `SDK_TYPE`，SDK 默认请求 `/api/v1/...`；
+如果设置 `SDK_TYPE=ops`，SDK 会自动请求 `/api/ops/v1/...`，业务代码仍然只需要调用 SDK 提供的方法，无需手动拼接前缀。
+
 ## 快速开始
 
 ```python
-from fsopenapi import SDKClient
-from fsopenapi import APIError, AuthenticationError
+import logging
+
+from fsopenapi import APIError, AuthenticationError, SDKClient
 
 BASE_URL = "https://your-gateway-host"  # 网关 base_url，不含末尾 /
 API_KEY = "your-api-key"
 
-client = SDKClient(BASE_URL, API_KEY)
+logging.basicConfig(level=logging.INFO)
+
+client = SDKClient(BASE_URL, API_KEY, logging_enable=True)
 
 # 会话由 SDK 自动管理（ECDH 握手、续期），首次调用业务接口时会自动建连
 # 查询账户列表
@@ -91,6 +99,110 @@ quote = client.market.quote(codes=["hk00700", "usAAPL"])
 print(quote)
 ```
 
+## 日志接入
+
+SDK 使用 Python 标准 `logging`，默认不会主动配置全局日志系统，也不会自动创建日志文件。
+
+- 如果业务方已经有自己的日志体系，建议直接传入自定义 logger
+- 如果业务方只想快速查看 SDK 日志，可在应用入口自行配置 `logging`
+- SDK 默认只输出安全摘要日志，不会记录完整 `api_key`、密钥、签名、nonce、完整请求/响应 body
+- `logging_enable=True` 时才会输出 SDK 请求/会话日志
+- `log_body=True` 会在日志中追加脱敏后的请求/响应体，默认关闭
+
+### 1. 使用业务方自己的 logger
+
+```python
+import logging
+
+from fsopenapi import JsonFormatter, SDKClient
+
+handler = logging.StreamHandler()
+handler.setFormatter(JsonFormatter())
+
+sdk_logger = logging.getLogger("myapp.fsopenapi")
+sdk_logger.setLevel(logging.INFO)
+sdk_logger.addHandler(handler)
+sdk_logger.propagate = False
+
+client = SDKClient(BASE_URL, API_KEY, logger=sdk_logger)
+```
+
+### 2. 使用 SDK 默认命名 logger
+
+```python
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("fsopenapi").setLevel(logging.INFO)
+
+client = SDKClient(BASE_URL, API_KEY, logging_enable=True)
+```
+
+### 3. 显式控制请求日志粒度
+
+```python
+client = SDKClient(
+    BASE_URL,
+    API_KEY,
+    logger=sdk_logger,
+    logging_enable=True,
+    log_body=True,
+)
+```
+
+- `logging_enable=False`：即使业务方配置了 logger，SDK 也不会主动输出请求/会话日志
+- `logging_enable=True, log_body=False`：输出安全摘要日志，适合生产默认配置
+- `logging_enable=True, log_body=True`：输出脱敏后的请求/响应体，适合排查问题时临时开启
+
+### 4. `log_body=True` 示例
+
+```python
+import logging
+
+from fsopenapi import JsonFormatter, SDKClient
+
+handler = logging.StreamHandler()
+handler.setFormatter(JsonFormatter())
+
+sdk_logger = logging.getLogger("myapp.fsopenapi.debug")
+sdk_logger.setLevel(logging.INFO)
+sdk_logger.addHandler(handler)
+sdk_logger.propagate = False
+
+client = SDKClient(
+    BASE_URL,
+    API_KEY,
+    logger=sdk_logger,
+    logging_enable=True,
+    log_body=True,
+)
+
+client.trade.create_order(
+    sub_account_id="sub-xxx",
+    stock_code="00700",
+    direction=1,
+    order_type=1,
+    quantity="100",
+    price="350.00",
+    market_code="hk",
+    currency="HKD",
+)
+```
+
+开启后，日志中会额外带上脱敏后的 `request_body`、`query_params`、`response_body` 或 `response_text`。建议仅在排查问题时临时开启，排查完成后关闭。
+
+常见日志事件包括：
+
+- `session_create_start`
+- `session_create_success`
+- `session_restore_success`
+- `session_refresh_required`
+- `request_start`
+- `request_success`
+- `response_business_error`
+- `response_decrypt_failed`
+- `request_http_error`
+
 ## 模块说明
 
 | 模块 | 说明 |
@@ -98,7 +210,7 @@ print(quote)
 | `client.session` | 会话管理：创建/查询/删除会话、本地会话状态 |
 | `client.account` | 账户：交易账户列表 |
 | `client.portfolio` | 组合：资金汇总、持仓 |
-| `client.trade` | 交易：下单、撤单、订单列表、资金流水、买卖信息 |
+| `client.trade` | 交易：下单、改单、撤单、订单列表、资金流水、买卖信息、订阅管理 |
 | `client.market` | 行情：报价、K 线、分时、盘口、逐笔、经纪队列 |
 
 ## 使用示例
@@ -164,7 +276,17 @@ print(order)
 # 撤单
 client.trade.cancel_order(order_id="order-xxx", sub_account_id="sub-xxx")
 
-# 订单列表（分页、状态、日期、方向等）
+# 改单
+modified = client.trade.order_modify(
+    sub_account_id="sub-xxx",
+    order_id="order-xxx",
+    modify_type=1,  # 1 修改普通订单参数，2 修改条件单参数
+    quantity="100",
+    price="351.00",
+)
+print(modified)
+
+# 订单列表（分页、状态、日期、方向等;show_type 0=正股 1=正股+期权 2=只期权）
 orders = client.trade.list_orders(
     sub_account_id="sub-xxx",
     start=0,
@@ -172,6 +294,7 @@ orders = client.trade.list_orders(
     status_arr=[20, 40],
     from_date="2025-01-01",
     to_date="2025-01-31",
+    show_type=2,  # 仅查期权时传 2
 )
 
 # 资金流水
@@ -181,7 +304,7 @@ flows = client.trade.get_cash_flows(
     trade_date_to="2025-01-31",
 )
 
-# 买卖信息（下单前校验）
+# 买卖信息（下单前校验）；期权时传 product_type=15、expiry、strike、right
 bid_ask = client.trade.get_bid_ask_info(
     sub_account_id="sub-xxx",
     stock_code="00700",
@@ -189,14 +312,45 @@ bid_ask = client.trade.get_bid_ask_info(
     market_code="hk",
     quantity="100",
     direction=1,
+    product_type=15, expiry="20260327", strike="125.00", right="CALL",  # 期权
 )
+
+# 创建交易订阅（当前仅暴露 `orderUpdate`，`channel_type=1` 表示 HTTP Webhook）
+subscription = client.trade.create_subscription(
+    event_type="orderUpdate",
+    endpoint="https://your-partner-host/webhook",
+)
+print(subscription)
+
+# 查询订阅列表
+subscriptions = client.trade.list_subscriptions(start=0, count=20)
+print(subscriptions)
+
+# 按事件类型过滤（当前仅支持 orderUpdate）
+filtered = client.trade.list_subscriptions(
+    start=0,
+    count=20,
+    event_type="orderUpdate",
+)
+print(filtered)
+
+# 更新订阅回调地址
+updated = client.trade.update_subscription(
+    subscription_id=123456,
+    endpoint="https://your-partner-host/webhook/v2",
+)
+print(updated)
+
+# 删除订阅
+deleted = client.trade.delete_subscription(subscription_id=123456)
+print(deleted)
 ```
 
 ### 5. 行情
 
 ```python
 # 批量报价（codes 为 marketCode+stockCode，如 hk00700、usAAPL）
-quote = client.market.quote(codes=["hk00700", "usAAPL"], delay=False)
+quote = client.market.quote(codes=["hk00700", "usAAPL"])
 
 # K 线（code 格式: marketCode + stockCode，如 hk00700）
 klines = client.market.kline("hk00700", ktype="day", num=30)
@@ -217,7 +371,7 @@ brokers = client.market.broker_list("hk00700")
 ## 异常处理
 
 ```python
-from openapi_client import APIError, AuthenticationError, PermissionError, CacheError
+from fsopenapi import APIError, AuthenticationError, PermissionError, CacheError
 
 try:
     data = client.account.list_accounts()
