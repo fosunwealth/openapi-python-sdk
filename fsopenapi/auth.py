@@ -1,17 +1,22 @@
+import base64
+import logging
+import os
 import time
 import uuid
-import base64
+
 import requests
-import json
-import os
 from cryptography.hazmat.primitives import serialization
 from .crypto import CryptoManager
+from .logging_utils import get_sdk_logger, log_event
 
 
 class SessionManager:
-    def __init__(self, base_url, api_key):
+    def __init__(self, base_url, api_key, logger=None, logging_enable=False):
         self.base_url = base_url.rstrip('/')
         self.api_key = api_key
+        self.logger = get_sdk_logger(logger)
+        self.logging_enable = logging_enable
+        self.api_prefix = self._resolve_api_prefix()
         self.session_id = None
         self.signing_key = None
         self.encryption_key = None
@@ -30,6 +35,17 @@ class SessionManager:
         else:
             self.identity_private_key = CryptoManager.load_identity_private_key(client_priv_pem)
             self.identity_public_key = CryptoManager.load_identity_public_key(server_pub_pem)
+
+    def _resolve_api_prefix(self):
+        sdk_type = os.getenv("SDK_TYPE", "").strip().lower()
+        if sdk_type == "ops":
+            return "/api/ops"
+        return "/api"
+
+    def _log(self, level, event, **fields):
+        if not self.logging_enable:
+            return
+        log_event(self.logger, level, event, **fields)
 
     def set_session(self, session_id, signing_key, encryption_key, expires_at):
         """手动设置会话信息（用于持久化复用）"""
@@ -66,6 +82,12 @@ class SessionManager:
         """
         expires_at = dumped.get("expiresAt", 0)
         if time.time() >= (expires_at - 60):
+            self._log(
+                logging.WARNING,
+                "session_restore_expired",
+                session_id=dumped.get("sessionId"),
+                expires_at=expires_at,
+            )
             return False
 
         priv_pem = dumped.get("clientPrivateKey", "").encode("utf-8")
@@ -73,15 +95,30 @@ class SessionManager:
         client_nonce = dumped.get("clientNonce")
         server_nonce = dumped.get("serverNonce")
 
-        self.private_key = serialization.load_pem_private_key(priv_pem, password=None)
-        self.session_id = dumped.get("sessionId")
-        self.expires_at = expires_at
-        self._server_pub_key = server_pub_key
-        self.client_nonce = client_nonce
-        self.server_nonce = server_nonce
+        try:
+            self.private_key = serialization.load_pem_private_key(priv_pem, password=None)
+            self.session_id = dumped.get("sessionId")
+            self.expires_at = expires_at
+            self._server_pub_key = server_pub_key
+            self.client_nonce = client_nonce
+            self.server_nonce = server_nonce
+            self.signing_key, self.encryption_key = CryptoManager.compute_shared_secret(
+                self.private_key, server_pub_key, client_nonce, server_nonce
+            )
+        except Exception:
+            self._log(
+                logging.ERROR,
+                "session_restore_failed",
+                session_id=dumped.get("sessionId"),
+                exc_info=True,
+            )
+            raise
 
-        self.signing_key, self.encryption_key = CryptoManager.compute_shared_secret(
-            self.private_key, server_pub_key, client_nonce, server_nonce
+        self._log(
+            logging.INFO,
+            "session_restore_success",
+            session_id=self.session_id,
+            expires_at=self.expires_at,
         )
         return True
 
@@ -90,13 +127,15 @@ class SessionManager:
         if not self.identity_private_key or not self.identity_public_key:
             raise ValueError("Missing FSOPENAPI_CLIENT_PRIVATE_KEY or FSOPENAPI_SERVER_PUBLIC_KEY environment variables")
 
+        start_time = time.time()
         self.private_key, client_pub_key = CryptoManager.generate_ecdh_key_pair()
 
         self.client_nonce = base64.b64encode(os.urandom(32)).decode('utf-8')
 
         signature = CryptoManager.sign_handshake(self.identity_private_key, client_pub_key, self.client_nonce)
 
-        url = f"{self.base_url}/api/v1/auth/SessionCreate"
+        url = f"{self.base_url}{self.api_prefix}/v1/auth/SessionCreate"
+        request_id = str(uuid.uuid4())
 
         payload = {
             "apiKey": str(self.api_key),
@@ -107,7 +146,7 @@ class SessionManager:
             "Content-Type": "application/json",
             "Accept": "application/json",
             "X-API-Key": str(self.api_key),
-            "X-Request-Id": str(uuid.uuid4()),
+            "X-Request-Id": request_id,
             "X-timestamp": str(int(time.time() * 1000)),
             "X-source": "python-sdk",
             "X-product": "sdk",
@@ -116,8 +155,26 @@ class SessionManager:
             "X-Signature": signature,
         }
 
-        response = requests.post(url, json=payload, headers=headers, verify=False)
-        response.raise_for_status()
+        self._log(
+            logging.INFO,
+            "session_create_start",
+            request_id=request_id,
+            path="/v1/auth/SessionCreate",
+        )
+
+        try:
+            response = requests.post(url, json=payload, headers=headers, verify=False)
+            response.raise_for_status()
+        except requests.RequestException:
+            self._log(
+                logging.ERROR,
+                "session_create_failed",
+                request_id=request_id,
+                path="/v1/auth/SessionCreate",
+                cost_ms=round((time.time() - start_time) * 1000, 3),
+                exc_info=True,
+            )
+            raise
 
         resp = response.json()
         if "encrypted" in resp:
@@ -126,6 +183,16 @@ class SessionManager:
             data = resp
         if data.get("code") != 0:
             from .exceptions import AuthenticationError
+            self._log(
+                logging.ERROR,
+                "session_create_failed",
+                request_id=request_id,
+                path="/v1/auth/SessionCreate",
+                status_code=response.status_code,
+                code=data.get("code", -1),
+                error_message=data.get("message", "Handshake failed"),
+                cost_ms=round((time.time() - start_time) * 1000, 3),
+            )
             raise AuthenticationError(
                 code=data.get("code", -1),
                 message=data.get("message", "Handshake failed"),
@@ -142,14 +209,43 @@ class SessionManager:
 
         if not server_signature or not self.server_nonce:
             from .exceptions import AuthenticationError
+            self._log(
+                logging.ERROR,
+                "session_create_failed",
+                request_id=request_id,
+                path="/v1/auth/SessionCreate",
+                status_code=response.status_code,
+                error_message="Missing server signature or nonce in response headers",
+                cost_ms=round((time.time() - start_time) * 1000, 3),
+            )
             raise AuthenticationError(code=40010, message="Missing server signature or nonce in response headers")
 
         if not CryptoManager.verify_handshake(self.identity_public_key, server_pub_key, self.server_nonce, server_signature):
             from .exceptions import AuthenticationError
+            self._log(
+                logging.ERROR,
+                "session_create_failed",
+                request_id=request_id,
+                path="/v1/auth/SessionCreate",
+                status_code=response.status_code,
+                error_message="Invalid server signature in handshake",
+                cost_ms=round((time.time() - start_time) * 1000, 3),
+            )
             raise AuthenticationError(code=40011, message="Invalid server signature in handshake")
 
         self.signing_key, self.encryption_key = CryptoManager.compute_shared_secret(
             self.private_key, server_pub_key, self.client_nonce, self.server_nonce
+        )
+
+        self._log(
+            logging.INFO,
+            "session_create_success",
+            request_id=request_id,
+            path="/v1/auth/SessionCreate",
+            status_code=response.status_code,
+            session_id=self.session_id,
+            expires_at=self.expires_at,
+            cost_ms=round((time.time() - start_time) * 1000, 3),
         )
 
         return {
@@ -161,7 +257,16 @@ class SessionManager:
 
     def get_valid_session(self):
         """获取有效会话，如果过期则重新创建"""
-        if not self.session_id or time.time() >= (self.expires_at - 60):
+        if not self.session_id:
+            self._log(logging.INFO, "session_create_required", reason="missing_session")
+            self.create_session()
+        elif time.time() >= (self.expires_at - 60):
+            self._log(
+                logging.WARNING,
+                "session_refresh_required",
+                session_id=self.session_id,
+                expires_at=self.expires_at,
+            )
             self.create_session()
         return self.session_id, self.signing_key, self.encryption_key
 

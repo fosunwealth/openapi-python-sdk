@@ -1,24 +1,46 @@
+# IDE
+.idea/
 # Python
-__pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+*.pyc
 
-# 虚拟环境
+# Python packaging
+*.egg-info/
+*.egg
+dist/
+build/
+eggs/
+*.manifest
+*.spec
+
+# Virtual environment
 .venv/
 venv/
 env/
 
-# 安装产物
-*.egg-info/
-dist/
-build/
+# Byte-compiled
+**/__pycache__/**
+*.py[cod]
+*$py.class
+*.so
 
-# 本地会话缓存（含私钥，禁止提交）
+# Session (contains sensitive keys)
 session.json
+
 *.pem
 
 # IDE
 .idea/
 .vscode/
 *.swp
+
+# 环境变量（含密钥，勿提交）
+.env
+
+# 安装产物
+*.egg-info/
+dist/
+build/
+.DS_Store

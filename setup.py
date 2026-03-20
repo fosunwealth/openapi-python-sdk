@@ -9,5 +9,7 @@ setup(
     install_requires=[
         "requests>=2.28.0",
         "cryptography>=41.0.0",
+        "websockets>=10.0",
+        "protobuf>=4.0.0",
     ],
 )

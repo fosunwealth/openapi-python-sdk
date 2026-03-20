@@ -1,3 +1,32 @@
+_ALLOWED_SUBSCRIPTION_EVENT_TYPES = {"orderUpdate"}
+
+
+def _normalize_subscription_event_type(event_type):
+    if event_type is None:
+        raise ValueError("event_type is required")
+    normalized = str(event_type).strip()
+    if not normalized:
+        raise ValueError("event_type is required")
+    if normalized not in _ALLOWED_SUBSCRIPTION_EVENT_TYPES:
+        raise ValueError("event_type currently only supports: orderUpdate")
+    return normalized
+
+
+def _normalize_required_string(value, field_name):
+    if value is None:
+        raise ValueError(f"{field_name} is required")
+    normalized = str(value).strip()
+    if not normalized:
+        raise ValueError(f"{field_name} is required")
+    return normalized
+
+
+def _normalize_required_int(value, field_name):
+    if value is None:
+        raise ValueError(f"{field_name} is required")
+    return int(value)
+
+
 class TradeAPI:
     def __init__(self, client):
         self.client = client
@@ -13,15 +42,23 @@ class TradeAPI:
         market_code="hk",
         currency="HKD",
         client_id=None,
-        allow_pre_post=None,
+        time_in_force=None,
         exp_type=None,
-        expiry_date=None,
         short_sell_type=None,
         trig_price=None,
         tail_type=None,
         tail_amount=None,
         tail_pct=None,
         spread=None,
+        profit_trig_price=None,
+        profit_quantity=None,
+        stop_loss_trig_price=None,
+        stop_loss_quantity=None,
+        product_type=None,
+        expiry=None,
+        strike=None,
+        right=None,
+        apply_account_id=None,
     ):
         """下单"""
         payload = {
@@ -37,12 +74,10 @@ class TradeAPI:
             payload["price"] = str(price)
         if client_id is not None:
             payload["clientId"] = int(client_id)
-        if allow_pre_post is not None:
-            payload["allowPrePost"] = int(allow_pre_post)
+        if time_in_force is not None:
+            payload["timeInForce"] = int(time_in_force)
         if exp_type is not None:
             payload["expType"] = int(exp_type)
-        if expiry_date is not None:
-            payload["expiryDate"] = str(expiry_date)
         if short_sell_type is not None:
             payload["shortSellType"] = str(short_sell_type)
         if trig_price is not None:
@@ -55,20 +90,137 @@ class TradeAPI:
             payload["tailPct"] = str(tail_pct)
         if spread is not None:
             payload["spread"] = str(spread)
-        return self.client.post("/api/v1/trade/OrderCreate", data=payload)
+        if profit_trig_price is not None:
+            payload["profitPrice"] = str(profit_trig_price)
+        if profit_quantity is not None:
+            payload["profitQuantity"] = str(profit_quantity)
+        if stop_loss_trig_price is not None:
+            payload["stopLossPrice"] = str(stop_loss_trig_price)
+        if stop_loss_quantity is not None:
+            payload["stopLossQuantity"] = str(stop_loss_quantity)
+        if product_type is not None:
+            payload["productType"] = int(product_type)
+        if expiry is not None:
+            payload["expiry"] = str(expiry)
+        if strike is not None:
+            payload["strike"] = str(strike)
+        if right is not None:
+            payload["right"] = str(right)
+        if apply_account_id is not None:
+            payload["applyAccountId"] = str(apply_account_id)
+        return self.client.post("/v1/trade/OrderCreate", data=payload)
 
-    def cancel_order(self, order_id, sub_account_id=None, client_id=None):
+    def cancel_order(self, order_id, sub_account_id=None, client_id=None, product_type=None, apply_account_id=None):
         """撤单"""
         payload = {"orderId": str(order_id)}
         if sub_account_id is not None:
             payload["subAccountId"] = str(sub_account_id)
         if client_id is not None:
             payload["clientId"] = int(client_id)
-        return self.client.post("/api/v1/trade/OrderCancel", data=payload)
+        if product_type is not None:
+            payload["productType"] = int(product_type)  
+        if apply_account_id is not None:
+            payload["applyAccountId"] = str(apply_account_id)
+        return self.client.post("/v1/trade/OrderCancel", data=payload)
+
+    def order_modify(
+        self,
+        sub_account_id,
+        order_id,
+        modify_type,
+        client_id=None,
+        quantity=None,
+        price=None,
+        trig_price=None,
+        tail_type=None,
+        tail_amount=None,
+        tail_pct=None,
+        spread=None,
+        profit_trig_price=None,
+        profit_quantity=None,
+        stop_loss_trig_price=None,
+        stop_loss_quantity=None,
+        product_type=None,
+        apply_account_id=None,
+    ):
+        """改单"""
+        payload = {
+            "subAccountId": str(sub_account_id),
+            "orderId": str(order_id),
+            "modifyType": int(modify_type),
+        }
+        if client_id is not None:
+            payload["clientId"] = int(client_id)
+        if quantity is not None:
+            payload["quantity"] = str(quantity)
+        if price is not None:
+            payload["price"] = str(price)
+        if trig_price is not None:
+            payload["trigPrice"] = str(trig_price)
+        if tail_type is not None:
+            payload["tailType"] = int(tail_type)
+        if tail_amount is not None:
+            payload["tailAmount"] = str(tail_amount)
+        if tail_pct is not None:
+            payload["tailPct"] = str(tail_pct)
+        if spread is not None:
+            payload["spread"] = str(spread)
+        if profit_trig_price is not None:
+            payload["profitPrice"] = str(profit_trig_price)
+        if profit_quantity is not None:
+            payload["profitQuantity"] = str(profit_quantity)
+        if stop_loss_trig_price is not None:
+            payload["stopLossPrice"] = str(stop_loss_trig_price)
+        if stop_loss_quantity is not None:
+            payload["stopLossQuantity"] = str(stop_loss_quantity)
+        if product_type is not None:
+            payload["productType"] = int(product_type)
+        if apply_account_id is not None:
+            payload["applyAccountId"] = str(apply_account_id)
+        return self.client.post("/v1/trade/OrderModify", data=payload)
+
+    def create_subscription(self, event_type, endpoint, channel_type=1):
+        """创建交易订阅"""
+        payload = {
+            "eventType": _normalize_subscription_event_type(event_type),
+            "channelType": int(channel_type),
+            "endpoint": _normalize_required_string(endpoint, "endpoint"),
+        }
+        return self.client.post("/v1/trade/SubscriptionCreate", data=payload)
+
+    def update_subscription(self, subscription_id, endpoint):
+        """更新订阅回调地址"""
+        payload = {
+            "subscriptionId": _normalize_required_int(
+                subscription_id, "subscription_id"
+            ),
+            "endpoint": _normalize_required_string(endpoint, "endpoint"),
+        }
+        return self.client.post("/v1/trade/SubscriptionUpdate", data=payload)
+
+    def delete_subscription(self, subscription_id):
+        """删除订阅"""
+        payload = {
+            "subscriptionId": _normalize_required_int(
+                subscription_id, "subscription_id"
+            )
+        }
+        return self.client.post("/v1/trade/SubscriptionDelete", data=payload)
+
+    def list_subscriptions(self, start=0, count=20, event_type=None):
+        """查询订阅列表"""
+        payload = {
+            "start": int(start),
+            "count": int(count),
+        }
+        if event_type is not None:
+            payload["eventType"] = _normalize_subscription_event_type(event_type)
+        return self.client.post("/v1/trade/SubscriptionList", data=payload)
 
     def list_orders(
         self,
         sub_account_id,
+        apply_account_id=None,
         start=0,
         count=20,
         stock_code=None,
@@ -79,22 +231,9 @@ class TradeAPI:
         market=None,
         sort="desc",
         client_id=None,
+        show_type=None,
     ):
-        """查询订单列表
-
-        Args:
-            sub_account_id: 证券账户（必填）
-            start: 偏移量（mapping start）
-            count: 返回数量（mapping count）
-            stock_code: 股票代码（可选）
-            status_arr: 订单状态筛选，trade-core 枚举，如 [20, 40]；不传返回所有
-            from_date: 开始日期 yyyy-mm-dd（可选）
-            to_date: 结束日期 yyyy-mm-dd（可选）
-            direction: 方向 1买 2卖（可选）
-            market: 市场列表如 ["hk","us"]（可选）
-            sort: desc/asc，默认 desc
-            client_id: 客户 ID（可选）
-        """
+        """查询订单列表"""
         payload = {
             "subAccountId": str(sub_account_id),
             "start": int(start),
@@ -116,11 +255,29 @@ class TradeAPI:
             payload["market"] = [str(x) for x in _m]
         if client_id is not None:
             payload["clientId"] = int(client_id)
-        return self.client.post("/api/v1/trade/OrderList", data=payload)
+        if apply_account_id is not None:
+            payload["applyAccountId"] = str(apply_account_id)
+        if show_type is not None:
+            payload["showType"] = int(show_type)
+        return self.client.post("/v1/trade/OrderList", data=payload)
 
-    def get_cash_flows(self, sub_account_id, trade_date_from=None, trade_date_to=None, flow_type=None, business_type=None, date=None):
+    def get_cash_flows(
+        self,
+        sub_account_id,
+        trade_date_from=None,
+        trade_date_to=None,
+        flow_type=None,
+        business_type=None,
+        date=None,
+        apply_account_id=None,
+        sub_account_class=None,
+    ):
         """查询资金流水"""
         payload = {"subAccountId": str(sub_account_id)}
+        if apply_account_id is not None:
+            payload["applyAccountId"] = str(apply_account_id)
+        if sub_account_class is not None:
+            payload["subAccountClass"] = int(sub_account_class)
         if trade_date_from is not None:
             payload["tradeDateFrom"] = trade_date_from
         if trade_date_to is not None:
@@ -132,7 +289,7 @@ class TradeAPI:
             payload["businessType"] = [int(x) for x in _bt]
         if date is not None:
             payload["date"] = date
-        return self.client.post("/api/v1/trade/CashFlows", data=payload)
+        return self.client.post("/v1/trade/CashFlows", data=payload)
 
     def get_bid_ask_info(
         self,
@@ -145,6 +302,11 @@ class TradeAPI:
         trig_price=None,
         direction=1,
         client_id=None,
+        product_type=None,
+        expiry=None,
+        strike=None,
+        right=None,
+        time_in_force=None,
     ):
         """查询买卖信息"""
         payload = {
@@ -162,4 +324,14 @@ class TradeAPI:
             payload["trigPrice"] = str(trig_price)
         if client_id is not None:
             payload["clientId"] = int(client_id)
-        return self.client.post("/api/v1/trade/BidAskInfo", data=payload)
+        if product_type is not None:
+            payload["productType"] = int(product_type)
+        if expiry is not None:
+            payload["expiry"] = str(expiry)
+        if strike is not None:
+            payload["strike"] = str(strike)
+        if right is not None:
+            payload["right"] = str(right)
+        if time_in_force is not None:
+            payload["timeInForce"] = int(time_in_force)
+        return self.client.post("/v1/trade/BidAskInfo", data=payload)

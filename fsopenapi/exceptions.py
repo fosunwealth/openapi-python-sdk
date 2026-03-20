@@ -1,9 +1,10 @@
 class APIError(Exception):
     """API 业务错误异常"""
-    def __init__(self, code, message, request_id=None):
+    def __init__(self, code, message, request_id=None, data=None):
         self.code = code
         self.message = message
         self.request_id = request_id
+        self.data = data
         super().__init__(f"API Error {code}: {message} (Request ID: {request_id})")
 
 class AuthenticationError(APIError):

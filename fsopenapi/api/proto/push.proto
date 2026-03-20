@@ -1,0 +1,56 @@
+syntax = "proto3";
+option go_package = "./;pushpb";
+
+
+// 客户端订阅信息
+message SubItem{
+	string topic = 1;                   // 主题：qt(报价),min(分时),tk(成交明细),ob(orderbook),bq(经纪商队列)
+	repeated string code = 2;           // code集合
+}
+
+// 客户端至服务端的消息
+message C2SMsg {
+	string act = 1;                     // 动作类型：hb(心跳),sub(订阅),unsub(取消订阅)
+	int64 hbValue = 2;                  // 心跳数值，action为hb时必填，建议客户端原样返回
+    repeated SubItem items = 3;         // 订阅信息，支持批量订阅和批量取消订阅
+    string requestid = 4;               // 扩展字段由客户端控制
+}
+
+
+// 错误信息
+message ErrMsg{
+    int64 code = 1;                     // 错误编码
+    string msg = 2;                     // 错误信息
+    string topic = 3;                   // 错误相关topic
+    string requestid = 4;               // 客户端传递requestid
+}
+
+message SubRepItem{
+	string topic = 1;                   // 主题：qt(报价),min(分时),tk(成交明细),ob(orderbook),bq(经纪商队列)
+	repeated string scode = 2;          // 成功code集合 success code
+    repeated string fcode = 3;          //< 订阅失败的情况 failed code
+    repeated string invalid = 4;        //< 无效代码 invalid code
+    repeated string denied = 5;         //< 没有权限被拒绝的code 
+
+}
+
+// 主题推送消息
+message TopicMsg{
+    string code = 1;                    // 市场+证券代码，如hk00700、usAAPL
+    string msg = 2;                     // 推送消息体，参考 http://gl.fosunhani.cn/market/proto.git 中的calc.proto pb结构
+}
+
+// 服务端至客户端的消息
+message S2CMsg
+{
+    string topic = 1;                   // 主题：hb(心跳),qt(报价),min(分时),tk(成交明细),ob(orderbook),bq(经纪商队列)
+    int64 hbValue = 2;                  // 心跳数值，topic为hb时必填
+    ErrMsg errMsg = 3;                  // 错误信息
+    repeated TopicMsg items = 4;        // 主题消息，支持批量消息
+    int64 time = 5;                     // 消息推送时的UNIX时间戳，单位: us，可配置关闭
+    string requestid = 6;               // 客户端传递requestid
+    repeated SubRepItem subRep = 7;     // 订阅相关回复信息 
+    int64 t = 8;                        // 可视化时间单位
+    int64 cache = 9;                    // 缓存时间
+    int64 id = 10;                      // 消息编号
+}

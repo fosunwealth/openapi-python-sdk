@@ -1,0 +1,288 @@
+syntax = "proto3";
+option go_package = "../calc/;pb";
+
+// POS和CAS阶段的报价数据，港股特有
+message CASQuote
+{
+    int64 refPrice = 1;    //Pre-Opening Session(POS)或Closing Auction Session(CAS)参考价 
+    int64 lowerPrice = 2;  //POS或CAS最高价
+    int64 upperPrice = 3;  //POS或CAS最低价
+    int64 IEP = 4;         //指示均衡价格，POS或CAS阶段产生
+    int64 IEV = 5;         //指示均衡成交量，POS或CAS阶段产生
+    int32 imbDirection = 6;//ImbalanceDirection非平衡方向，0无、1买入、2卖出、3买入=卖出，POS或CAS阶段产生
+    int64 imbQty = 7;      //ImbalanceQuantity非平衡交易量，POS或CAS阶段产生
+}
+
+// 股票类报价扩展数据
+message StockQuoteExt
+{   
+    int64 amp = 1;          //amplitude，振幅%
+    int64 tor = 2;          //turnoverRatio，换手率%
+    int64 peTTM = 3;        //市盈率TTM
+    int64 peStatic = 4;     //市盈率(静)
+    int64 mktCap = 5;       //总市值
+    int64 floatMktCap = 6;  //流通市值
+    int64 pb = 7;           //市净率
+    int64 dyrStatic = 8;    // 股息率(静) Dividend Yield Ratio
+    int64 dyrTTM = 9;       // 股息率ttm Dividend Yield Ratio ttm
+    int64 dpsTTM = 10;      // 股息ttm
+    int64 bidAskRatio = 11; //< 委比
+    CASQuote cas = 12;      //POS和CAS阶段的报价数据，港股特有
+    int64 volRatio = 13;    // 量比
+    int64 afVol = 14;       //盘后成交量，上交所科创板特有
+    int64 afTurnover = 15;  //盘后成交额，上交所科创板特有
+    int64 limitUp = 16;     //涨停价，A股特有
+    int64 limitDown = 17;   //跌停价，A股特有
+}
+
+
+// etf扩展信息
+message ETFQuoteExt
+{   
+    int64 amp = 1;          //amplitude，振幅%
+    int64 tor = 2;          //turnoverRatio，换手率%
+    // int64 peTTM = 3;        //市盈率TTM
+    // int64 peStatic = 4;     //市盈率(静)
+    // int64 dyrStatic = 5;    // 股息率(静) Dividend Yield Ratio
+    int64 dyrTTM = 3;       // 股息率ttm Dividend Yield Ratio ttm
+    int64 dpsTTM = 4;       // 股息ttm
+    int64 bidAskRatio = 5;  //< 委比
+    int64 premium = 6;      //< 溢价
+    CASQuote cas = 7;       //POS和CAS阶段的报价数据，港股特有
+    int64 volRatio = 8;     // 量比
+    int64 limitUp = 9;      //涨停价，A股特有
+    int64 limitDown = 10;   //跌停价，A股特有
+}
+
+// 窝轮/牛熊/界内证
+message WarrantQuoteExt{
+    int64 premium = 1;          //< 溢价
+    int64 effLeverage = 2;      //< 有效杠杆/实际杠杆 = 对冲值×杠杆比率
+    int64 leverageRatio = 3;    //< 杠杆比率 (相关资产价格/（价格x换股比率）)
+    int64 breakEvenPrice = 4;   //< 打和点 1.认购证打和点 = [行使价 + (认购证价格 x 兑换比率)] 2.认沽证打和点 = [行使价 - (认沽证价格 x 兑换比率)]
+    int64 toCallPrice = 5;      //< 距收回价 =（相关资产最新价-收回价）/收回价* 100%
+    int64 moneyness = 6;        //< 价内/价外
+    int64 convertPrice = 7;     //< 换股价
+    CASQuote cas = 8;           //POS和CAS阶段的报价数据，港股特有
+}
+
+// 指数相关
+message IndexQuoteExt{
+    int64 amp = 1;          //amplitude，振幅%
+}
+
+// 动态报价数据
+message DynamicQuote
+{
+    int64 qtTime = 1;       //行情时间，格式150405123 时分秒毫秒
+    int64 qtDate = 2;       //行情日期，格式20060102 年月日
+    int32 power = 3;        //价格基准，价格类字段乘以10^power转为整数，其它浮点型数值默认乘以100转为整数    
+    int32 tradeStatus = 4;  //交易状态: 0 Normal(已上市)正常, 2 Halt(已上市)停牌, 3 Unlist待上市, 4 SuspendList暂停上市, 5 Delist已退市, 6 Expired已到期
+    int64 price = 5;        //当前价
+    int64 chgVal = 6;       //涨跌额
+    int64 chgPct = 7;       //涨跌幅%
+    int64 pClose = 8;       //prevClose，昨收价
+    int64 open = 9;         //今开价
+    int64 high = 10;        //最高价
+    int64 low = 11;         //最低价
+    int64 vol = 12;         //成交量
+    int64 turnover = 13;    //成交额
+    int64 week52High = 14;   //52周最高价
+    int64 week52Low = 15;    //52周最低价
+
+    // 各种类型扩展字段
+    StockQuoteExt stockQuote = 16;          // 股票类报价扩展数据
+    WarrantQuoteExt warrantQuote = 17;      // 窝轮
+    IndexQuoteExt   indexExt = 18;          // 指数相关   
+    ETFQuoteExt etfQuote = 19;          
+
+    int64 calcSendtime = 20; //计算层发送的UNIX时间戳，单位: us，可配置关闭
+
+    int64 avg = 21; //平均价
+}
+
+// 分时基础信息
+message MinuteBasic
+{
+    int64 date = 1;         //日期，格式yyyyMMdd，如：20211021
+    int64 pClose = 2;       //prevClose，昨收价
+    int32 power = 3;        //价格基准，价格类字段乘以10^power转为整数，其它浮点型数值默认乘以100转为整数
+    int32 total = 4;        //MinuteQuote MaxOfferSet
+}
+
+// 分时报价
+message MinuteQuote
+{
+    int64 time = 1;         //时间，格式HHmm，如：930
+    int64 price = 2;        //价格
+    int64 vol = 3;          //成交量
+    int64 turnover = 4;     //成交额
+    int64 avg = 5;          //均价
+}
+
+// 档位信息
+message OrderItem {
+    int64 price = 1;        //价格
+    int64 vol = 2;          //数量
+    int32 orders = 3;       //订单数
+}
+
+// 盘口数据
+message OrderBook {
+    int64 qtTime = 1;       //行情时间，格式150405123 时分秒毫秒
+    int64 qtDate = 2;       //行情日期，格式20060102 年月日
+    int32 power = 3;        //价格基准，价格类字段乘以10^power转为整数，其它浮点型数值默认乘以100转为整数
+    int32 buyPct = 4;       //买盘数量占比%
+    int32 sellPct = 5;      //卖盘数量占比%
+    repeated OrderItem buyOrders = 6;   //买盘信息
+    repeated OrderItem sellOrders = 7;  //买盘信息
+    int64 calcSendtime = 8; //计算层发送的UNIX时间戳，单位: us，可配置关闭
+}
+
+// 成交明细基础信息
+message TickBasic
+{
+    int64 date = 1;         //日期，格式yyyyMMdd，如：20211021
+    int32 power = 2;        //价格基准，价格类字段乘以10^power转为整数，其它浮点型数值默认乘以100转为整数
+    int32 maxIndex = 3;     //tick分key的最大索引(从0开始)，默认每个分key存最多5000条tickItem数据
+}
+
+// 成交明细记录
+message TickItem
+{
+    int64 id = 1;           //记录ID
+    int64 time = 2;         //时间，格式HHmmssSSS，如：93012345
+    int64 price = 3;        //价格
+    int64 vol = 4;          //成交量
+    int64 calcSendtime = 5; //计算层发送的UNIX时间戳，单位: us，可配置关闭
+    int32 direction = 6;    //买卖方向，0无、1买入、2卖出
+    int32 trdType = 7;      //交易类型
+    string trdFlag = 8;     //交易类型标识
+}
+
+// 股票排行每项数据
+message StockRankItem
+{
+    string symbol = 1;      //证券唯一编码
+    int32 power = 2;        //价格基准，价格类字段乘以10^power转为整数，其它浮点型数值默认乘以100转为整数
+    int64 price = 3;        //当前价
+    int64 chgVal = 4;       //涨跌额
+    int64 chgPct = 5;       //涨跌幅%
+    int64 vol = 6;          //成交量
+    int64 turnover = 7;     //成交额
+    int64 tor = 8;          //turnoverRatio，换手率 
+    int64 peStatic = 9;     //市盈率(静)
+    int64 amp = 10;         //amplitude，振幅%
+    int64 mktCap = 11;      //市值
+    int64 pb = 12;          //市净率
+    int64 dyrStatic = 13;   //股息率(静) Dividend Yield Ratio
+}
+
+// 股票排行数据
+message StockRank
+{
+    int64 qtTime = 1;       //行情时间，格式150405123 时分秒毫秒
+    int64 qtDate = 2;       //行情日期，格式20060102 年月日
+    repeated StockRankItem items = 3;   // 排行列表
+    int64 calcSendtime = 4;     //计算层发送的UNIX时间戳，单位: us，可配置关闭
+}
+
+// K线基础数据
+message KLineBasic
+{
+    int32 power = 1;        //价格基准，价格类字段乘以10^power转为整数，其它浮点型数值默认乘以100转为整数
+}
+
+// K线每项数据
+message KLineItem
+{
+    int64 time = 1;         //时间，格式yyyyMMdd，分K格式yyyyMMddHHmm
+    int64 close = 2;        //收盘价
+    int64 open = 3;         //今开价
+    int64 pClose = 4;       //prevClose，昨收价
+    int64 high = 5;         //最高价
+    int64 low = 6;          //最低价
+    int64 vol = 7;          //成交量
+    int64 turnover = 8;     //成交额
+    int64 tor = 9;          //turnoverRatio，换手率%
+}
+
+//行业/概念间排行
+message SectorRank
+{
+    int64 qtTime = 1;       //行情时间，格式150405123 时分秒毫秒
+    int64 qtDate = 2;       //行情日期，格式20060102 年月日
+    repeated SectorRankItem items = 3;   // 行业排行列表
+    int64 calcSendtime = 4; //计算层发送的UNIX时间戳，单位: us，可配置关闭
+}
+
+//行业/概念间排行项
+message SectorRankItem
+{
+    string symbol = 1;          //行业/概念唯一编码
+    int32 power = 2;            //价格基准，价格类字段乘以10^power转为整数，其它浮点型数值默认乘以100转为整数
+    int64 chgPct = 3;           //涨跌幅
+    StockRankItem leading = 4;  //行业领涨
+}
+
+//指数/行业/概念等成分股的涨跌平
+message Updown {
+    int64 qtTime = 1;       //行情时间，格式150405123 时分秒毫秒
+    int64 qtDate = 2;       //行情日期，格式20060102 年月日
+	int32 raiseCnt = 3;     //上涨家数
+	int32 fallCnt = 4;      //下跌家数
+	int32 equalCnt = 5;     //平盘家数
+    int64 calcSendtime = 6; //计算层发送的UNIX时间戳，单位: us，可配置关闭
+}
+
+// 经纪商队列数据项
+message BrokerQueueItem {
+    int32 spreadNum = 1;              //跟买一/卖一价格的价差距离
+    repeated string brokerIds = 2;     //经纪商席位ID列表
+}
+
+// 经纪商队列
+message BrokerQueue {
+    int64 qtTime = 1;       //行情时间，格式150405123 时分秒毫秒
+    int64 qtDate = 2;       //行情日期，格式20060102 年月日
+    repeated BrokerQueueItem buyBrokers = 3;      //买盘经纪商队列信息
+    repeated BrokerQueueItem sellBrokers = 4;     //卖盘经纪商队列信息
+    int64 calcSendtime = 5;                           // 计算层数据
+}
+
+
+// 资金分布
+message CapDist {
+    int64 qtTime = 1;       //行情时间，格式150405123 时分秒毫秒
+    int64 qtDate = 2;       //行情日期，格式20060102 年月日
+    int32 power = 3;              // 价格基准，价格类字段乘以10^power转为整数，其它浮点型数值默认乘以100转为整数
+    CapItem capIn = 4;            // 资金流入明细
+    CapItem capOut = 5;           // 资金流出明细
+    int64 capNetIn = 6;           // 资金净流入
+}
+
+// 资金流明细
+message CapItem {
+    int64 total = 1;        // 总金额
+    int64 big = 2;          // 大单额度
+    int32 bigPct = 3;       // 大单比例%
+    int64 mid = 4;          // 中单额度
+    int32 midPct = 5;       // 中单比例%
+    int64 small = 6;        // 小单额度
+    int32 smallPct = 7;     // 小单比例%
+}
+
+// 资金流向基础信息
+message CapFlowBasic {
+    int32 date = 1;         // 日期，格式yyyyMMdd，如：20211021
+    int32 power = 2;        // power
+}
+
+// 资金流向分时明细
+message CapFlowItem {
+    int64 time = 1;         // 时间，格式HHmm，如：930
+    int64 total = 2;        // 总净流入
+    int64 big = 3;          // 大单净流入
+    int64 mid = 4;          // 中单净流入
+    int64 small = 5;        // 小单净流入
+}
