@@ -13,3 +13,12 @@ class AccountAPI:
         if os.environ.get("SDK_TYPE", "").strip().lower() != "ops":
             raise ValueError("ops_accounts() requires SDK_TYPE=ops")
         return self.client.post("/v1/account/Accounts", data={})
+
+    def sim_account_create(self):
+        """创建模拟账户"""
+        return self.client.post("/v1/account/SimAccountCreate", data={})
+
+    def sim_account_reset(self, sub_account_id):
+        """重置模拟账户（必填 subAccountId）"""
+        payload = {"subAccountId": str(sub_account_id)}
+        return self.client.post("/v1/account/SimAccountReset", data=payload)

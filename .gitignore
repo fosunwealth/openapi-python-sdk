@@ -44,3 +44,4 @@ session.json
 dist/
 build/
 .DS_Store
+i__pycache__/
