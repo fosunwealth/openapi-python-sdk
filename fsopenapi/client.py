@@ -10,6 +10,7 @@ import requests
 from .auth import SessionManager
 from .crypto import CryptoManager
 from .exceptions import APIError
+from .lang import build_lang_header, resolve_lang_from_env
 from .logging_utils import get_sdk_logger, log_event, sanitize_payload
 
 
@@ -28,9 +29,11 @@ class OpenAPIClient:
         self.logger = get_sdk_logger(logger)
         self.logging_enable = logging_enable
         self.log_body = log_body
+        self.lang = resolve_lang_from_env()
         self.auth_manager = SessionManager(
             self.base_url,
             resolved_api_key,
+            lang=self.lang,
             logger=self.logger,
             logging_enable=logging_enable,
         )
@@ -71,6 +74,9 @@ class OpenAPIClient:
         elif response_text is not None:
             fields["response_text"] = response_text
         return fields
+
+    def _build_common_headers(self) -> dict:
+        return build_lang_header(self.lang)
 
     def _request(self, method, path, data=None, params=None):
         """发送带加密和签名的请求"""
@@ -132,6 +138,7 @@ class OpenAPIClient:
         )
 
         headers = {
+            **self._build_common_headers(),
             "Content-Type": "application/json",
             "X-API-Key": self.api_key,
             "X-session": session_id,

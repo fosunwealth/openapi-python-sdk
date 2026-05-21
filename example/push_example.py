@@ -17,8 +17,8 @@ logging.captureWarnings(True)
 # 配置：替换为实际的网关地址和 API Key
 # ============================================================
 SUB_ACCOUNT_ID = "xxx"
-BASE_URL = "https://openapi.fosunxcz.com"
-API_KEY = "xxx"
+BASE_URL = "xxx" #real_base_url
+API_KEY = "xxx" #your_api_key
 
 
 def build_demo_logger(log_file: str = "push.log"):
@@ -107,6 +107,8 @@ async def demo_market_push():
         # 订阅股票报价
         await asyncio.sleep(1) 
         await client.market_push.subscribeQuote(["hk01810","hk00700"])
+
+        await client.market_push.subscribePretMarketQuote(["usAMD","usAAPL"])
         
         # 订阅股票分时
         await asyncio.sleep(1)

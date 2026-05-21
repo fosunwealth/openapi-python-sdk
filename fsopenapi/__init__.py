@@ -7,8 +7,11 @@ from .api.account import AccountAPI
 from .api.market import MarketAPI
 from .api.market_push import MarketPushAPI
 from .api.optmarket import OptMarketAPI
+from .api.rwa import RwaAPI
 from .api.session import SessionAPI
+from .api.wealth import WealthAPI
 from .exceptions import APIError, AuthenticationError, PermissionError, CacheError
+from .lang import DEFAULT_LANG, LANG_EN, LANG_ZH_CN, LANG_ZH_TC
 from .logging_utils import JsonFormatter, get_sdk_logger
 
 
@@ -31,10 +34,16 @@ class SDKClient(OpenAPIClient):
         self.market = MarketAPI(self)
         self.market_push = MarketPushAPI(self)
         self.optmarket = OptMarketAPI(self)
+        self.rwa = RwaAPI(self)
+        self.wealth = WealthAPI(self)
 
 
 __all__ = [
     "SDKClient",
+    "DEFAULT_LANG",
+    "LANG_EN",
+    "LANG_ZH_CN",
+    "LANG_ZH_TC",
     "APIError",
     "AuthenticationError",
     "PermissionError",
@@ -47,5 +56,7 @@ __all__ = [
     "MarketAPI",
     "MarketPushAPI",
     "OptMarketAPI",
+    "RwaAPI",
+    "WealthAPI",
     "get_sdk_logger",
 ]

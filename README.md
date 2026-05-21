@@ -57,6 +57,7 @@ pip install -e ./openapi-python-sdk
 - `FSOPENAPI_SERVER_PUBLIC_KEY`:  设置为您的公钥内容（PEM 格式，单行/多行均可）  
 - `FSOPENAPI_CLIENT_PRIVATE_KEY`: 设置为您的私钥内容（PEM 格式，单行/多行均可）  
 - `SDK_TYPE`: 可选；默认走 `/api` 前缀，设置为 `ops` 时走 `/api/ops` 前缀  
+- `FSOPENAPI_LANG`: 可选；请求头 `X-Lang` 的语言，合法值为 `zhCn`（默认）、`zhTc`、`en`
 
 例如（Linux/macOS bash）：
 
@@ -64,7 +65,10 @@ pip install -e ./openapi-python-sdk
 export FSOPENAPI_SERVER_PUBLIC_KEY="$(cat ./server_public.pem)"
 export FSOPENAPI_CLIENT_PRIVATE_KEY="$(cat ./client_private.pem)"
 export SDK_TYPE=ops
+export FSOPENAPI_LANG=en
 ```
+
+未设置 `FSOPENAPI_LANG` 时，SDK 自动使用 `zhCn`（简体）。握手与业务 REST 请求均会携带 `X-Lang`，无需在业务代码中手动设置。
 
 如果密钥未通过环境变量正确提供，SDK 初始化会抛出错误并提示密钥缺失。
 
