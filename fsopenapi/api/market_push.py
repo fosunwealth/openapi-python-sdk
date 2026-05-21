@@ -17,8 +17,12 @@ _WS_STATUS_HINTS = {
     500: "服务端内部错误，请稍后重试",
 }
 
+# push_url(FSOPENAPI_PUSH_URL): 行情推送 WebSocket 地址，例如 wss://host/msg/v1/push,host替换为推送的实际地址
+
+
 def _ws_status_hint(status_code: int) -> str:
     return _WS_STATUS_HINTS.get(status_code, f"未知错误 (HTTP {status_code})")
+
 
 def _ws_status_hint_from_str(err_str: str) -> str:
     """从异常字符串中提取 HTTP 状态码并返回对应提示（兼容无 status_code 属性的异常）"""
@@ -28,26 +32,33 @@ def _ws_status_hint_from_str(err_str: str) -> str:
         return _ws_status_hint(int(m.group(1)))
     return ""
 
+
 class MarketPushAPI:
     def __init__(self, client):
         self.client = client
-        self._url = "wss://openapi-push.fosunxcz.com/msg/v1/push" # prod
         self._ws = None
-        self._subscriptions = {}       # 本地记录已订阅的合约，断线后用于恢复
+        self._subscriptions = {}  # 本地记录已订阅的合约，断线后用于恢复
         self._refresh_task = None
-    
+
+    def _resolve_url(self) -> str:
+        url = self.client.push_url
+        if not url:
+            raise ValueError("push_url is required. Please pass it to SDKClient or set FSOPENAPI_PUSH_URL")
+        return url
+
     async def connect(self):
         session_id, _, _ = self.client.auth_manager.get_valid_session()
         api_key = self.client.auth_manager.api_key
-        
+
         headers = {
             "X-Api-Key": api_key,
             "X-Session": session_id,
         }
-        
-        self.client.logger.info(f"正在连接到 {self._url}...")
+
+        push_url = self._resolve_url()
+        self.client.logger.info(f"正在连接到 {push_url}...")
         try:
-            self._ws = await websockets.connect(self._url, additional_headers=headers)
+            self._ws = await websockets.connect(push_url, additional_headers=headers)
         except websockets.exceptions.InvalidStatusCode as e:
             # websockets < 10.x
             msg = f"连接被服务端拒绝: HTTP {e.status_code} - {_ws_status_hint(e.status_code)}"
@@ -55,7 +66,8 @@ class MarketPushAPI:
             raise RuntimeError(msg) from e
         except Exception as e:
             # 兼容不同版本的 websockets
-            if hasattr(websockets.exceptions, 'RejectHandshake') and isinstance(e, websockets.exceptions.RejectHandshake):
+            if hasattr(websockets.exceptions, 'RejectHandshake') and isinstance(e,
+                                                                                websockets.exceptions.RejectHandshake):
                 body = e.body.decode("utf-8", errors="replace") if e.body else ""
                 msg = f"连接被服务端拒绝: HTTP {e.status_code} - {_ws_status_hint(e.status_code)}，错误详情: {body}"
                 self.client.logger.error(msg)
@@ -97,7 +109,7 @@ class MarketPushAPI:
                                     "item_code": item.code,
                                     "data": qt
                                 }
-                            )     
+                            )
                 else:
                     msg = json.loads(message)
                     self.client.logger.info(f"收到消息(json): {msg}")
@@ -107,7 +119,7 @@ class MarketPushAPI:
             self.client.logger.info("WebSocket 连接已关闭")
         except Exception as e:
             self.client.logger.error(f"接收消息异常: {e}")
-    
+
     async def send_heartbeat(self, hbValue):
         """
         发送心跳
@@ -133,8 +145,8 @@ class MarketPushAPI:
         req_id = uuid.uuid4().hex[:8]
 
         if Msg_Use_Proto:
-            c2s_msg = push_pb2.C2SMsg(act="sub", 
-                items=[push_pb2.SubItem(topic=topic, code=codes)], requestid=req_id)
+            c2s_msg = push_pb2.C2SMsg(act="sub",
+                                      items=[push_pb2.SubItem(topic=topic, code=codes)], requestid=req_id)
             self.client.logger.info(f"发送订阅请求(proto): {c2s_msg}")
             await self._ws.send(c2s_msg.SerializeToString())
         else:
@@ -142,7 +154,7 @@ class MarketPushAPI:
                 "act": "sub",
                 "items": [{"topic": topic, "code": codes}],
                 "requestid": req_id
-             }   
+            }
             self.client.logger.info(f"发送订阅请求(json): {msg}")
             await self._ws.send(json.dumps(msg))
 
@@ -154,8 +166,8 @@ class MarketPushAPI:
         req_id = uuid.uuid4().hex[:8]
 
         if Msg_Use_Proto:
-            c2s_msg = push_pb2.C2SMsg(act="unsub", 
-                items=[push_pb2.SubItem(topic=topic, code=codes)], requestid=req_id)
+            c2s_msg = push_pb2.C2SMsg(act="unsub",
+                                      items=[push_pb2.SubItem(topic=topic, code=codes)], requestid=req_id)
             self.client.logger.info(f"发送取消订阅请求(proto): {c2s_msg}")
             await self._ws.send(c2s_msg.SerializeToString())
         else:
@@ -170,7 +182,7 @@ class MarketPushAPI:
     async def close(self):
         if self._ws:
             await self._ws.close()
-    
+
     # 订阅市场快照
     async def subscribeMarketStatus(self, codes):
         return await self.subscribe("mkt", codes)
@@ -184,14 +196,15 @@ class MarketPushAPI:
     ob 支持港美A的股票消息，支持美股盘前盘后
     bq 支持港美A的股票消息，支持美股盘前盘后，美股夜盘
     """
+
     # 订阅报价
     async def subscribeQuote(self, codes):
         return await self.subscribe("qt", codes)
-    
+
     # 取消订阅报价
     async def unsubscribeQuote(self, codes):
         return await self.unsubscribe("qt", codes)
-    
+
     # 订阅分时
     async def subscribeMin(self, codes):
         return await self.subscribe("min", codes)
@@ -199,7 +212,7 @@ class MarketPushAPI:
     # 取消订阅分时
     async def unsubscribeMin(self, codes):
         return await self.unsubscribe("min", codes)
-    
+
     # 订阅成交明细
     async def subscribeTick(self, codes):
         return await self.subscribe("tk", codes)
@@ -207,7 +220,7 @@ class MarketPushAPI:
     # 取消订阅成交明细
     async def unsubscribeTick(self, codes):
         return await self.unsubscribe("tk", codes)
-    
+
     # 订阅经纪队列
     async def subscribeBrokerQueue(self, codes):
         return await self.subscribe("bq", codes)
@@ -223,10 +236,11 @@ class MarketPushAPI:
     # 取消订阅摆盘(买卖档)
     async def unsubscribeOrderbook(self, codes):
         return await self.unsubscribe("ob", codes)
-    
+
     """
     pqt pmin ptk 支持美股盘前盘后的股票消息
     """
+
     # 订阅美股盘前盘后报价
     async def subscribePretMarketQuote(self, codes):
         return await self.subscribe("pqt", codes)
@@ -254,6 +268,7 @@ class MarketPushAPI:
     """
     qt_nt min_nt tk_nt 支持美股夜盘的股票消息
     """
+
     # 订阅美股夜盘报价
     async def subscribeNightMarketQuote(self, codes):
         return await self.subscribe("qt_nt", codes)
@@ -281,6 +296,7 @@ class MarketPushAPI:
     """
     qt_op min_op tk_op 支持美股期权的股票消息
     """
+
     # 订阅美股期权报价
     async def subscribeOptionQuote(self, codes):
         return await self.subscribe("qt_op", codes)
@@ -288,7 +304,7 @@ class MarketPushAPI:
     # 取消订阅美股期权报价
     async def unsubscribeOptionQuote(self, codes):
         return await self.unsubscribe("qt_op", codes)
-    
+
     # 订阅美股期权分时
     async def subscribeOptionMin(self, codes):
         return await self.subscribe("min_op", codes)
@@ -308,6 +324,7 @@ class MarketPushAPI:
     """
     trade 支持股票的交易消息
     """
+
     # 订阅股票交易消息
     async def subscribeTrade(self, codes):
         return await self.subscribe("trade", codes)

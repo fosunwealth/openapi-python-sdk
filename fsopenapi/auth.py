@@ -7,13 +7,15 @@ import uuid
 import requests
 from cryptography.hazmat.primitives import serialization
 from .crypto import CryptoManager
+from .lang import build_lang_header
 from .logging_utils import get_sdk_logger, log_event
 
 
 class SessionManager:
-    def __init__(self, base_url, api_key, logger=None, logging_enable=False):
+    def __init__(self, base_url, api_key, lang, logger=None, logging_enable=False):
         self.base_url = base_url.rstrip('/')
         self.api_key = api_key
+        self.lang = lang
         self.logger = get_sdk_logger(logger)
         self.logging_enable = logging_enable
         self.api_prefix = self._resolve_api_prefix()
@@ -143,6 +145,7 @@ class SessionManager:
         }
 
         headers = {
+            **build_lang_header(self.lang),
             "Content-Type": "application/json",
             "Accept": "application/json",
             "X-API-Key": str(self.api_key),
@@ -150,7 +153,6 @@ class SessionManager:
             "X-timestamp": str(int(time.time() * 1000)),
             "X-source": "python-sdk",
             "X-product": "sdk",
-            "X-lang": "zh-CN",
             "X-Nonce": self.client_nonce,
             "X-Signature": signature,
         }
