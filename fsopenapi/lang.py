@@ -8,6 +8,16 @@ DEFAULT_LANG = LANG_ZH_CN
 ALLOWED_LANGS = frozenset({LANG_ZH_CN, LANG_ZH_TC, LANG_EN})
 
 ENV_LANG = "FSOPENAPI_LANG"
+ENV_CLIENT_SSL_VERIFY = "FSOPENAPI_CLIENT_SSL_VERIFY"
+
+
+def resolve_ssl_verify(explicit=None):
+    if explicit is not None:
+        return bool(explicit)
+    raw = os.getenv(ENV_CLIENT_SSL_VERIFY)
+    if raw is None or str(raw).strip() == "":
+        return True
+    return str(raw).strip().lower() not in ("0", "false", "no", "off")
 
 
 def validate_lang(value: str) -> str:

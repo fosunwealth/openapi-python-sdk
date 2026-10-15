@@ -4,6 +4,7 @@ from .client import OpenAPIClient
 from .api.trade import TradeAPI
 from .api.portfolio import PortfolioAPI
 from .api.account import AccountAPI
+from .api.ops import OpsTradeAPI, OpsPortfolioAPI, OpsAccountAPI
 from .api.market import MarketAPI
 from .api.market_push import MarketPushAPI
 from .api.optmarket import OptMarketAPI
@@ -16,7 +17,7 @@ from .logging_utils import JsonFormatter, get_sdk_logger
 
 
 class SDKClient(OpenAPIClient):
-    def __init__(self, base_url=None, api_key=None, logger=None, logging_enable=False, log_body=False):
+    def __init__(self, base_url=None, api_key=None, logger=None, logging_enable=False, log_body=False, ssl_verify=None):
         missing = [k for k in ("FSOPENAPI_SERVER_PUBLIC_KEY", "FSOPENAPI_CLIENT_PRIVATE_KEY") if not os.environ.get(k)]
         if missing:
             raise ValueError(f"缺少必要的环境变量: {', '.join(missing)}。请在启动前设置 FSOPENAPI_SERVER_PUBLIC_KEY 和 FSOPENAPI_CLIENT_PRIVATE_KEY")
@@ -26,11 +27,15 @@ class SDKClient(OpenAPIClient):
             logger=logger,
             logging_enable=logging_enable,
             log_body=log_body,
+            ssl_verify=ssl_verify,
         )
         self.session = SessionAPI(self)
         self.trade = TradeAPI(self)
         self.portfolio = PortfolioAPI(self)
         self.account = AccountAPI(self)
+        self.opsTrade = OpsTradeAPI(self)
+        self.opsPortfolio = OpsPortfolioAPI(self)
+        self.opsAccount = OpsAccountAPI(self)
         self.market = MarketAPI(self)
         self.market_push = MarketPushAPI(self)
         self.optmarket = OptMarketAPI(self)
@@ -53,6 +58,9 @@ __all__ = [
     "TradeAPI",
     "PortfolioAPI",
     "AccountAPI",
+    "OpsTradeAPI",
+    "OpsPortfolioAPI",
+    "OpsAccountAPI",
     "MarketAPI",
     "MarketPushAPI",
     "OptMarketAPI",

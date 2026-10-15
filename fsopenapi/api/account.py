@@ -9,9 +9,9 @@ class AccountAPI:
         return self.client.post("/v1/account/Accounts", data={})
 
     def ops_accounts(self):
-        """Ops可交易账户列表"""
+        """已废弃：请改用 client.opsAccount.list_accounts()。保留仅为兼容，要求 SDK_TYPE=ops。"""
         if os.environ.get("SDK_TYPE", "").strip().lower() != "ops":
-            raise ValueError("ops_accounts() requires SDK_TYPE=ops")
+            raise ValueError("ops_accounts() requires SDK_TYPE=ops; prefer client.opsAccount.list_accounts()")
         return self.client.post("/v1/account/Accounts", data={})
 
     def sim_account_create(self):

@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="fsopenapi",
-    version="0.1.0",
+    version="0.1.1",
     description="Fosun Wealth OpenAPI Python SDK",
     python_requires=">=3.8",
     packages=find_packages(include=["fsopenapi*"]),
