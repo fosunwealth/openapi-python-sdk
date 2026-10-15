@@ -46,6 +46,7 @@ class MarketPushAPI:
         headers = {
             "X-Api-Key": api_key,
             "X-Session": session_id,
+            "X-Request-Client": "openapi-python-sdk",
         }
 
         self.client.logger.info(f"正在连接到 {self._url}...")

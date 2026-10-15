@@ -261,6 +261,27 @@ class TradeAPI:
             payload["showType"] = int(show_type)
         return self.client.post("/v1/trade/OrderList", data=payload)
 
+    def get_order_detail(
+        self,
+        sub_account_id,
+        order_id,
+        client_id=None,
+        apply_account_id=None,
+        product_type=None,
+    ):
+        """查询订单详情"""
+        payload = {
+            "subAccountId": str(sub_account_id),
+            "orderId": str(order_id),
+        }
+        if client_id is not None:
+            payload["clientId"] = int(client_id)
+        if apply_account_id is not None:
+            payload["applyAccountId"] = str(apply_account_id)
+        if product_type is not None:
+            payload["productType"] = int(product_type)
+        return self.client.post("/v1/trade/OrderDetail", data=payload)
+
     def get_cash_flows(
         self,
         sub_account_id,
@@ -299,7 +320,6 @@ class TradeAPI:
         market_code="hk",
         quantity=None,
         price=None,
-        trig_price=None,
         direction=1,
         client_id=None,
         product_type=None,
@@ -307,6 +327,7 @@ class TradeAPI:
         strike=None,
         right=None,
         time_in_force=None,
+        apply_account_id=None,
     ):
         """查询买卖信息"""
         payload = {
@@ -320,8 +341,6 @@ class TradeAPI:
             payload["quantity"] = str(quantity)
         if price is not None:
             payload["price"] = str(price)
-        if trig_price is not None:
-            payload["trigPrice"] = str(trig_price)
         if client_id is not None:
             payload["clientId"] = int(client_id)
         if product_type is not None:
@@ -334,4 +353,6 @@ class TradeAPI:
             payload["right"] = str(right)
         if time_in_force is not None:
             payload["timeInForce"] = int(time_in_force)
+        if apply_account_id is not None:
+            payload["applyAccountId"] = str(apply_account_id)
         return self.client.post("/v1/trade/BidAskInfo", data=payload)
