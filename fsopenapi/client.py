@@ -10,12 +10,21 @@ import requests
 from .auth import SessionManager
 from .crypto import CryptoManager
 from .exceptions import APIError
-from .lang import build_lang_header, resolve_lang_from_env
+from .lang import build_lang_header, resolve_lang_from_env, resolve_ssl_verify
 from .logging_utils import get_sdk_logger, log_event, sanitize_payload
 
 
 class OpenAPIClient:
-    def __init__(self, base_url=None, api_key=None, logger=None, logging_enable=False, log_body=False):
+    def __init__(
+        self,
+        base_url=None,
+        api_key=None,
+        logger=None,
+        logging_enable=False,
+        log_body=False,
+        ssl_verify=None,
+        api_prefix=None,
+    ):
         resolved_base_url = base_url or os.getenv("FSOPENAPI_BASE_URL")
         resolved_api_key = api_key or os.getenv("FSOPENAPI_API_KEY")
 
@@ -30,25 +39,26 @@ class OpenAPIClient:
         self.logging_enable = logging_enable
         self.log_body = log_body
         self.lang = resolve_lang_from_env()
+        self.ssl_verify = resolve_ssl_verify(ssl_verify)
+        if api_prefix is None:
+            sdk_type = os.getenv("SDK_TYPE", "").strip().lower()
+            api_prefix = "/api/ops" if sdk_type == "ops" else "/api"
+        self.api_prefix = api_prefix.rstrip("/") if api_prefix else "/api"
         self.auth_manager = SessionManager(
             self.base_url,
             resolved_api_key,
             lang=self.lang,
             logger=self.logger,
             logging_enable=logging_enable,
+            ssl_verify=self.ssl_verify,
+            api_prefix=self.api_prefix,
         )
         self._http_session = requests.Session()
+        self._http_session.verify = self.ssl_verify
 
         parsed_url = urlparse(self.base_url)
         self.host = parsed_url.netloc
         self.base_path = parsed_url.path.rstrip('/')
-        self.api_prefix = self._resolve_api_prefix()
-
-    def _resolve_api_prefix(self):
-        sdk_type = os.getenv("SDK_TYPE", "").strip().lower()
-        if sdk_type == "ops":
-            return "/api/ops"
-        return "/api"
 
     def _log(self, level, event, **fields):
         if not self.logging_enable:
@@ -143,6 +153,7 @@ class OpenAPIClient:
             "X-API-Key": self.api_key,
             "X-session": session_id,
             "X-Request-Id": request_id,
+            "X-Request-Client": "openapi-python-sdk",
             "X-Timestamp": timestamp,
             "X-Nonce": nonce,
             "X-Signature": signature,
@@ -161,7 +172,7 @@ class OpenAPIClient:
 
         try:
             response = self._http_session.request(
-                method, url, data=final_body_bytes, params=params, headers=headers, verify=False
+                method, url, data=final_body_bytes, params=params, headers=headers
             )
         except requests.RequestException:
             self._log(

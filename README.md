@@ -58,6 +58,7 @@ pip install -e ./openapi-python-sdk
 - `FSOPENAPI_CLIENT_PRIVATE_KEY`: 设置为您的私钥内容（PEM 格式，单行/多行均可）  
 - `SDK_TYPE`: 可选；默认走 `/api` 前缀，设置为 `ops` 时走 `/api/ops` 前缀  
 - `FSOPENAPI_LANG`: 可选；请求头 `X-Lang` 的语言，合法值为 `zhCn`（默认）、`zhTc`、`en`
+- `FSOPENAPI_CLIENT_SSL_VERIFY`: 可选；SDK 客户端对 OpenAPI 服务端的 HTTPS 证书校验，默认 `true`
 
 例如（Linux/macOS bash）：
 
@@ -74,6 +75,59 @@ export FSOPENAPI_LANG=en
 
 如果不设置 `SDK_TYPE`，SDK 默认请求 `/api/v1/...`；
 如果设置 `SDK_TYPE=ops`，SDK 会自动请求 `/api/ops/v1/...`，业务代码仍然只需要调用 SDK 提供的方法，无需手动拼接前缀。
+
+### OPS 与个人接口分离（平铺入口）
+
+同一 `SDKClient`，前缀由 `SDK_TYPE`（或构造时 `api_prefix`）控制；**对外属性名分开**，便于后续解耦个人接口：
+
+| 场景 | 入口 | 说明 |
+|------|------|------|
+| 个人用户 | `client.trade` / `client.portfolio` / `client.account` | 个人路径；后续可独立演进 |
+| OPS 配对 | `client.opsTrade` / `client.opsPortfolio` / `client.opsAccount` | `apply_account_id` **必填**（账户列表除外）；须 `SDK_TYPE=ops` |
+
+```python
+import os
+from fsopenapi import SDKClient
+
+os.environ["SDK_TYPE"] = "ops"
+client = SDKClient(BASE_URL, API_KEY)
+
+# 账户列表
+accounts = client.opsAccount.list_accounts()
+
+# 买卖信息 / 下单：MAIN + apply(EAM/AM)
+bid = client.opsTrade.get_bid_ask_info(
+    sub_account_id="368241963",
+    apply_account_id="9969255001",
+    stock_code="CIF",
+    market_code="us",
+    direction=1,
+    order_type=3,
+    price="1.00",
+)
+order = client.opsTrade.create_order(
+    sub_account_id="368241963",
+    apply_account_id="9969255001",
+    stock_code="CIF",
+    direction=1,
+    order_type=3,
+    quantity="1",
+    price="1.00",
+    market_code="us",
+    currency="USD",
+    time_in_force=2,
+)
+
+# 订单详情：MAIN + apply(EAM/AM)
+detail = client.opsTrade.get_order_detail(
+    sub_account_id="368241963",
+    apply_account_id="9969255001",
+    order_id="order-xxx",
+)
+print(detail)
+```
+
+请勿再用个人 `client.trade.*` 拼 OPS 配对参数；OPS 场景统一走 `client.opsTrade` / `opsPortfolio` / `opsAccount`。
 
 ## 快速开始
 
@@ -214,7 +268,7 @@ client.trade.create_order(
 | `client.session` | 会话管理：创建/查询/删除会话、本地会话状态 |
 | `client.account` | 账户：交易账户列表 |
 | `client.portfolio` | 组合：资金汇总、持仓 |
-| `client.trade` | 交易：下单、改单、撤单、订单列表、资金流水、买卖信息、订阅管理 |
+| `client.trade` | 交易：下单、改单、撤单、订单列表、订单详情、资金流水、买卖信息、订阅管理 |
 | `client.market` | 行情：报价、K 线、分时、盘口、逐笔、经纪队列 |
 
 ## 使用示例
@@ -301,6 +355,16 @@ orders = client.trade.list_orders(
     show_type=2,  # 仅查期权时传 2
 )
 
+# 订单详情（含费用明细 feeDetail 与成交明细 transactionList）；期权时传 product_type=15
+detail = client.trade.get_order_detail(
+    sub_account_id="sub-xxx",
+    order_id="order-xxx",
+    product_type=15,  # 普通股票可不传
+)
+print(detail)
+print(detail["data"]["feeDetail"])
+print(detail["data"]["transactionList"])
+
 # 资金流水
 flows = client.trade.get_cash_flows(
     sub_account_id="sub-xxx",
@@ -317,6 +381,7 @@ bid_ask = client.trade.get_bid_ask_info(
     quantity="100",
     direction=1,
     product_type=15, expiry="20260327", strike="125.00", right="CALL",  # 期权
+    # apply_account_id="apply-xxx",
 )
 
 # 创建交易订阅（当前仅暴露 `orderUpdate`，`channel_type=1` 表示 HTTP Webhook）

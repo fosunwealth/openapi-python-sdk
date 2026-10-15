@@ -12,13 +12,23 @@ from .logging_utils import get_sdk_logger, log_event
 
 
 class SessionManager:
-    def __init__(self, base_url, api_key, lang, logger=None, logging_enable=False):
+    def __init__(
+        self,
+        base_url,
+        api_key,
+        lang,
+        logger=None,
+        logging_enable=False,
+        ssl_verify=True,
+        api_prefix=None,
+    ):
         self.base_url = base_url.rstrip('/')
         self.api_key = api_key
         self.lang = lang
         self.logger = get_sdk_logger(logger)
         self.logging_enable = logging_enable
-        self.api_prefix = self._resolve_api_prefix()
+        self.ssl_verify = ssl_verify
+        self.api_prefix = api_prefix if api_prefix is not None else self._resolve_api_prefix_from_env()
         self.session_id = None
         self.signing_key = None
         self.encryption_key = None
@@ -38,7 +48,7 @@ class SessionManager:
             self.identity_private_key = CryptoManager.load_identity_private_key(client_priv_pem)
             self.identity_public_key = CryptoManager.load_identity_public_key(server_pub_pem)
 
-    def _resolve_api_prefix(self):
+    def _resolve_api_prefix_from_env(self):
         sdk_type = os.getenv("SDK_TYPE", "").strip().lower()
         if sdk_type == "ops":
             return "/api/ops"
@@ -150,6 +160,7 @@ class SessionManager:
             "Accept": "application/json",
             "X-API-Key": str(self.api_key),
             "X-Request-Id": request_id,
+            "X-Request-Client": "openapi-python-sdk",
             "X-timestamp": str(int(time.time() * 1000)),
             "X-source": "python-sdk",
             "X-product": "sdk",
@@ -165,7 +176,7 @@ class SessionManager:
         )
 
         try:
-            response = requests.post(url, json=payload, headers=headers, verify=False)
+            response = requests.post(url, json=payload, headers=headers, verify=self.ssl_verify)
             response.raise_for_status()
         except requests.RequestException:
             self._log(
