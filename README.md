@@ -267,7 +267,7 @@ client.trade.create_order(
 |------|------|
 | `client.session` | 会话管理：创建/查询/删除会话、本地会话状态 |
 | `client.account` | 账户：交易账户列表 |
-| `client.portfolio` | 组合：资金汇总、持仓 |
+| `client.portfolio` | 组合：资金汇总、持仓、每日利息 |
 | `client.trade` | 交易：下单、改单、撤单、订单列表、订单详情、资金流水、买卖信息、订阅管理 |
 | `client.market` | 行情：报价、K 线、分时、盘口、逐笔、经纪队列 |
 
@@ -312,6 +312,14 @@ holdings = client.portfolio.get_holdings(
     count=100,
     product_types=[1, 2],
     currencies=["HKD", "USD"],
+)
+
+# 每日利息（恒生/老虎双柜台由中台聚合；日期 yyyy-MM-dd，缺省近 30 天，跨度上限 90 天）
+interest = client.portfolio.get_interest_daily(
+    sub_account_id="sub-xxx",
+    from_date="2026-10-01",
+    to_date="2026-10-31",
+    currency="USD",
 )
 ```
 
