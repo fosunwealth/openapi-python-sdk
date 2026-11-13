@@ -38,3 +38,21 @@ class PortfolioAPI:
         if sub_account_class is not None:
             payload["subAccountClass"] = int(sub_account_class)
         return self.client.post("/v1/portfolio/Holdings", data=payload)
+
+    def get_interest_daily(self, sub_account_id=None, client_id=None, apply_account_id=None,
+                           from_date=None, to_date=None, currency=None):
+        """查询账号每日利息（from_date/to_date 为 yyyy-MM-dd，缺省近 30 天，跨度上限 90 天）"""
+        payload = {}
+        if sub_account_id is not None:
+            payload["subAccountId"] = str(sub_account_id)
+        if client_id is not None:
+            payload["clientId"] = int(client_id)
+        if apply_account_id is not None:
+            payload["applyAccountId"] = str(apply_account_id)
+        if from_date is not None:
+            payload["fromDate"] = str(from_date)
+        if to_date is not None:
+            payload["toDate"] = str(to_date)
+        if currency is not None:
+            payload["currency"] = str(currency)
+        return self.client.post("/v1/portfolio/InterestDaily", data=payload)
