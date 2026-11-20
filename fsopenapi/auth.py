@@ -1,5 +1,6 @@
 import base64
 import logging
+import math
 import os
 import time
 import uuid
@@ -7,8 +8,31 @@ import uuid
 import requests
 from cryptography.hazmat.primitives import serialization
 from .crypto import CryptoManager
+from .key_loader import load_identity_key_pems
 from .lang import build_lang_header
 from .logging_utils import get_sdk_logger, log_event
+
+
+def validate_request_timeout(request_timeout):
+    if not isinstance(request_timeout, (tuple, list)) or len(request_timeout) != 2:
+        raise ValueError("request_timeout must contain connect and read timeouts")
+
+    normalized = []
+    for value in request_timeout:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError("request_timeout values must be positive numbers")
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError("request_timeout values must be positive finite numbers")
+        normalized.append(value)
+    return tuple(normalized)
+
+
+def _snapshot_password_bytes(password):
+    if isinstance(password, str):
+        password = password.encode("utf-8")
+    if not isinstance(password, bytes) or not password:
+        raise ValueError("A non-empty session snapshot password is required")
+    return password
 
 
 class SessionManager:
@@ -21,8 +45,10 @@ class SessionManager:
         logging_enable=False,
         ssl_verify=True,
         api_prefix=None,
+        request_timeout=(5, 30),
     ):
         self.base_url = base_url.rstrip('/')
+        self.request_timeout = validate_request_timeout(request_timeout)
         self.api_key = api_key
         self.lang = lang
         self.logger = get_sdk_logger(logger)
@@ -38,8 +64,7 @@ class SessionManager:
         self.server_nonce = None
         self._server_pub_key = None
 
-        client_priv_pem = os.environ.get("FSOPENAPI_CLIENT_PRIVATE_KEY")
-        server_pub_pem = os.environ.get("FSOPENAPI_SERVER_PUBLIC_KEY")
+        client_priv_pem, server_pub_pem = load_identity_key_pems()
 
         if not client_priv_pem or not server_pub_pem:
             self.identity_private_key = None
@@ -60,25 +85,32 @@ class SessionManager:
         log_event(self.logger, level, event, **fields)
 
     def set_session(self, session_id, signing_key, encryption_key, expires_at):
-        """手动设置会话信息（用于持久化复用）"""
+        """手动设置会话信息（用于持久化复用）。
+
+        调用方如需持久化 signing_key/encryption_key，必须自行加密存储；
+        不要以明文写入磁盘或提交到仓库。官方快照请使用 dump_session()。
+        """
         self.session_id = session_id
         self.signing_key = signing_key
         self.encryption_key = encryption_key
         self.expires_at = expires_at
 
-    def dump_session(self):
+    def dump_session(self, password):
         """
-        将当前会话序列化为可持久化的字典。
+        将当前会话导出为使用密码加密私钥的快照。
         包含重新派生双密钥所需的全部信息。
         """
         if not self.session_id or self.private_key is None:
             return None
+
+        password_bytes = _snapshot_password_bytes(password)
         priv_pem = self.private_key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption(),
+            encryption_algorithm=serialization.BestAvailableEncryption(password_bytes),
         ).decode("utf-8")
         return {
+            "formatVersion": 2,
             "sessionId": self.session_id,
             "expiresAt": self.expires_at,
             "clientPrivateKey": priv_pem,
@@ -87,11 +119,19 @@ class SessionManager:
             "serverNonce": self.server_nonce,
         }
 
-    def restore_session(self, dumped: dict):
+    def restore_session(self, dumped: dict, password):
         """
         从 dump_session() 返回的字典中恢复完整会话。
         如果会话已过期（提前 60 秒），返回 False。
         """
+        if not isinstance(dumped, dict):
+            raise TypeError("Session snapshot must be a dictionary")
+        if type(dumped.get("formatVersion")) is not int or dumped["formatVersion"] != 2:
+            raise ValueError(
+                "Unsupported or missing session snapshot formatVersion; "
+                "V1 plaintext snapshots are not supported. Please create a new session."
+            )
+
         expires_at = dumped.get("expiresAt", 0)
         if time.time() >= (expires_at - 60):
             self._log(
@@ -102,13 +142,14 @@ class SessionManager:
             )
             return False
 
+        password_bytes = _snapshot_password_bytes(password)
         priv_pem = dumped.get("clientPrivateKey", "").encode("utf-8")
         server_pub_key = dumped.get("serverPublicKey")
         client_nonce = dumped.get("clientNonce")
         server_nonce = dumped.get("serverNonce")
 
         try:
-            self.private_key = serialization.load_pem_private_key(priv_pem, password=None)
+            self.private_key = serialization.load_pem_private_key(priv_pem, password=password_bytes)
             self.session_id = dumped.get("sessionId")
             self.expires_at = expires_at
             self._server_pub_key = server_pub_key
@@ -137,7 +178,11 @@ class SessionManager:
     def create_session(self):
         """执行 ECDH+ECDSA 握手创建会话"""
         if not self.identity_private_key or not self.identity_public_key:
-            raise ValueError("Missing FSOPENAPI_CLIENT_PRIVATE_KEY or FSOPENAPI_SERVER_PUBLIC_KEY environment variables")
+            raise ValueError(
+                "Missing identity key configuration: set FSOPENAPI_CLIENT_PRIVATE_KEY "
+                "or FSOPENAPI_CLIENT_PRIVATE_KEY_PATH, and FSOPENAPI_SERVER_PUBLIC_KEY "
+                "or FSOPENAPI_SERVER_PUBLIC_KEY_PATH"
+            )
 
         start_time = time.time()
         self.private_key, client_pub_key = CryptoManager.generate_ecdh_key_pair()
@@ -176,7 +221,7 @@ class SessionManager:
         )
 
         try:
-            response = requests.post(url, json=payload, headers=headers, verify=self.ssl_verify)
+            response = requests.post(url,json=payload, headers=headers,verify=self.ssl_verify,timeout=self.request_timeout)
             response.raise_for_status()
         except requests.RequestException:
             self._log(

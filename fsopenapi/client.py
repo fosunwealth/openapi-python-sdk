@@ -7,7 +7,7 @@ import uuid
 from urllib.parse import urlparse
 
 import requests
-from .auth import SessionManager
+from .auth import SessionManager, validate_request_timeout
 from .crypto import CryptoManager
 from .exceptions import APIError
 from .lang import build_lang_header, resolve_lang_from_env, resolve_ssl_verify
@@ -24,6 +24,7 @@ class OpenAPIClient:
         log_body=False,
         ssl_verify=None,
         api_prefix=None,
+        request_timeout=(5, 30),
     ):
         resolved_base_url = base_url or os.getenv("FSOPENAPI_BASE_URL")
         resolved_api_key = api_key or os.getenv("FSOPENAPI_API_KEY")
@@ -35,6 +36,7 @@ class OpenAPIClient:
 
         self.base_url = resolved_base_url.rstrip('/')
         self.api_key = resolved_api_key
+        self.request_timeout = validate_request_timeout(request_timeout)
         self.logger = get_sdk_logger(logger)
         self.logging_enable = logging_enable
         self.log_body = log_body
@@ -52,6 +54,7 @@ class OpenAPIClient:
             logging_enable=logging_enable,
             ssl_verify=self.ssl_verify,
             api_prefix=self.api_prefix,
+            request_timeout=self.request_timeout,
         )
         self._http_session = requests.Session()
         self._http_session.verify = self.ssl_verify
@@ -172,7 +175,7 @@ class OpenAPIClient:
 
         try:
             response = self._http_session.request(
-                method, url, data=final_body_bytes, params=params, headers=headers
+                method,url, data=final_body_bytes, params=params, headers=headers, timeout=self.request_timeout
             )
         except requests.RequestException:
             self._log(
@@ -352,10 +355,10 @@ class OpenAPIClient:
     def get(self, path, params=None):
         return self._request("GET", path, params=params)
 
-    def dump_session(self):
-        """将当前会话序列化为字典，可存入 JSON 文件供下次进程启动时恢复。"""
-        return self.auth_manager.dump_session()
+    def dump_session(self, password):
+        """将当前会话导出为使用密码加密私钥的快照。"""
+        return self.auth_manager.dump_session(password=password)
 
-    def restore_session(self, dumped: dict) -> bool:
-        """从 dump_session() 保存的字典中恢复完整会话。"""
-        return self.auth_manager.restore_session(dumped)
+    def restore_session(self, dumped: dict, password) -> bool:
+        """从加密的会话快照恢复完整会话。"""
+        return self.auth_manager.restore_session(dumped, password=password)

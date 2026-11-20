@@ -51,11 +51,14 @@ pip install -e ./openapi-python-sdk
 
 将自动安装依赖 `requests`、`cryptography`。
 
-**注意**：SDK 通过环境变量获取密钥内容。如果未检测到密钥，将直接抛出异常并停止运行。  
+**注意**：SDK 通过环境变量或密钥文件获取密钥内容。如果未检测到密钥，将直接抛出异常并停止运行。  
 请在启动前配置以下环境变量（例如在 `.env` 文件或操作系统环境中设置）：
 
 - `FSOPENAPI_SERVER_PUBLIC_KEY`:  设置为您的公钥内容（PEM 格式，单行/多行均可）  
 - `FSOPENAPI_CLIENT_PRIVATE_KEY`: 设置为您的私钥内容（PEM 格式，单行/多行均可）  
+- `FSOPENAPI_SERVER_PUBLIC_KEY_PATH`: 可选；服务端公钥 PEM 文件路径，设置后优先于 `FSOPENAPI_SERVER_PUBLIC_KEY`  
+- `FSOPENAPI_CLIENT_PRIVATE_KEY_PATH`: 可选；客户端身份私钥 PEM 文件路径，设置后优先于 `FSOPENAPI_CLIENT_PRIVATE_KEY`；SDK **默认不校验文件 mode**（当前未在 Linux 实机验证 0600 语义），生产环境仍建议 `chmod 600` 或 `0400`  
+- `FSOPENAPI_ENFORCE_KEY_FILE_PERMISSIONS`: 可选；设为 `1/true/yes/on` 时在 POSIX 上启用私钥文件权限校验（0600 通过；0644 或其他用户可访问拒绝；同组只读需属组属于进程有效组/附加组）。默认关闭，建议在 Linux/macOS 验证后再开启  
 - `SDK_TYPE`: 可选；默认走 `/api` 前缀，设置为 `ops` 时走 `/api/ops` 前缀  
 - `FSOPENAPI_LANG`: 可选；请求头 `X-Lang` 的语言，合法值为 `zhCn`（默认）、`zhTc`、`en`
 - `FSOPENAPI_CLIENT_SSL_VERIFY`: 可选；SDK 客户端对 OpenAPI 服务端的 HTTPS 证书校验，默认 `true`
@@ -69,12 +72,51 @@ export SDK_TYPE=ops
 export FSOPENAPI_LANG=en
 ```
 
+也可以改用密钥文件，避免私钥进入环境变量或被子进程继承：
+
+```bash
+chmod 600 ./client_private.pem
+export FSOPENAPI_SERVER_PUBLIC_KEY_PATH="$(pwd)/server_public.pem"
+export FSOPENAPI_CLIENT_PRIVATE_KEY_PATH="$(pwd)/client_private.pem"
+```
+
+Kubernetes Secret / Docker Secret 挂载私钥时，`defaultMode` / `mode` 建议设为 `0400` 或 `0600`；如果容器以非 root 运行并使用 fsGroup，可以设为 `0440`（属组设为容器的 fsGroup）。SDK **默认不强制校验文件 mode**；如设置 `FSOPENAPI_ENFORCE_KEY_FILE_PERMISSIONS=1`，0644（其他用户可读）会被拒绝，同组只读在属组匹配时通过。服务端公钥不做权限限制。同时设置 `FSOPENAPI_CLIENT_PRIVATE_KEY` 与 `FSOPENAPI_CLIENT_PRIVATE_KEY_PATH` 时，以 `_PATH` 为准。
+
 未设置 `FSOPENAPI_LANG` 时，SDK 自动使用 `zhCn`（简体）。握手与业务 REST 请求均会携带 `X-Lang`，无需在业务代码中手动设置。
 
-如果密钥未通过环境变量正确提供，SDK 初始化会抛出错误并提示密钥缺失。
+如果密钥未通过环境变量或密钥文件正确提供，SDK 初始化会抛出错误并提示密钥缺失。
 
 如果不设置 `SDK_TYPE`，SDK 默认请求 `/api/v1/...`；
 如果设置 `SDK_TYPE=ops`，SDK 会自动请求 `/api/ops/v1/...`，业务代码仍然只需要调用 SDK 提供的方法，无需手动拼接前缀。
+
+所有 HTTP 请求默认超时为 `(5, 30)` 秒（连接/读取），可通过 `SDKClient(..., request_timeout=(connect, read))` 调整；`SessionCreate` 与业务请求均生效。
+
+### 会话快照：加密写入与旧版迁移
+
+`client.dump_session(password)` 返回 `formatVersion=2` 的加密快照。请使用 `write_session_snapshot(path, snapshot)` 写盘，它会在 POSIX 下以 `0600` 权限原子写入（Windows 继承目录 ACL，建议放在仅服务账号可访问的目录），并拒绝 V1/明文快照；不要再用 `json.dump` 直接写文件。
+
+```python
+from fsopenapi import SDKClient, write_session_snapshot
+
+client = SDKClient()
+snapshot = client.dump_session(password=password)
+write_session_snapshot("./session.json", snapshot)
+```
+
+旧版 SDK 生成的 `session.json` 是**明文私钥**，新版本会拒绝恢复（`formatVersion` 不是 2）。升级步骤：
+
+1. 停掉所有共用同一 API Key 的进程（一个 Key 同时只有一个有效 Session，避免互踢）。
+2. 备份后删除旧 `session.json`；文件含明文私钥，不要再保留或提交到仓库。
+3. 用新版本启动一个进程重建会话，并用 `write_session_snapshot()` 保存；其他进程用同一密码恢复。
+4. 如需保留当前会话，可用 `migrate_session_snapshot(path, password)` 把 V1 快照原地重写为 V2 加密快照；迁移前会校验 key/nonces 能完成 ECDH。如果文件已经是 V2 但权限是 `0644`，调用同一个函数也会把它重写为 `0600`：
+
+```python
+from fsopenapi import migrate_session_snapshot
+
+migrate_session_snapshot("./session.json", password=password)
+```
+
+注意：迁移只做文件替换，不保证旧数据在磁盘块层面被擦除；安全要求高的环境建议删除旧文件后重新建会话。快照密码同样属于敏感信息，建议从密钥文件、交互输入或密钥管理服务获取，不要硬编码在代码里。
 
 ### OPS 与个人接口分离（平铺入口）
 
